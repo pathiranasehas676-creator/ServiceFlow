@@ -4,40 +4,34 @@ import { useEffect, useState } from 'react';
 import { KpiCard } from '@/components/admin/kpi-card';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { StatusBadge } from '@/components/admin/status-badge';
-import { LoadingSkeletonTable } from '@/components/admin/loading-skeleton-table';
-import { adminApi } from '@/lib/mock/admin-api';
-import { KPIStats, VerificationDTO, ProofDTO, PayoutDTO, AuditLogDTO } from '@/types/admin';
-import { Briefcase, UserCheck, FileCheck, Wallet, DollarSign, Plus, Settings as SettingsIcon } from 'lucide-react';
-import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { Briefcase, UserCheck, FileCheck, Wallet, DollarSign, Building } from 'lucide-react';
 import Link from 'next/link';
+import { apiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
+
+interface DashboardStats {
+    totalUsers: number;
+    totalJobs: number;
+    totalPayoutsCents: number;
+    pendingProofs: number;
+    pendingPayouts: number;
+    pendingIdVerifications: number;
+    pendingBankVerifications: number;
+    openTickets: number;
+}
 
 export default function AdminDashboard() {
-    const [stats, setStats] = useState<KPIStats | null>(null);
-    const [verifications, setVerifications] = useState<VerificationDTO[]>([]);
-    const [proofs, setProofs] = useState<ProofDTO[]>([]);
-    const [payouts, setPayouts] = useState<PayoutDTO[]>([]);
-    const [auditLogs, setAuditLogs] = useState<AuditLogDTO[]>([]);
+    const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'verifications' | 'proofs' | 'payouts'>('verifications');
 
     useEffect(() => {
         async function loadData() {
             setLoading(true);
             try {
-                const [statsData, verificationsData, proofsData, payoutsData, logsData] = await Promise.all([
-                    adminApi.getStats(),
-                    adminApi.getVerifications(),
-                    adminApi.getProofs(),
-                    adminApi.getPayouts(),
-                    adminApi.getAuditLogs(),
-                ]);
-                setStats(statsData);
-                setVerifications(verificationsData);
-                setProofs(proofsData);
-                setPayouts(payoutsData);
-                setAuditLogs(logsData);
+                const response = await apiClient.get('/admin/stats');
+                setStats(response.data);
+            } catch (error) {
+                toast.error('Failed to load dashboard stats');
             } finally {
                 setLoading(false);
             }
@@ -45,243 +39,119 @@ export default function AdminDashboard() {
         loadData();
     }, []);
 
+    const currencyFormatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+    });
+
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-bold">Dashboard</h1>
-                <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
+                <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+                <p className="text-muted-foreground">Overview of system health and pending actions.</p>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
-                    title="Jobs Today"
-                    value={stats?.totalJobsToday || 0}
-                    icon={Briefcase}
-                />
-                <KpiCard
-                    title="Pending IDs"
-                    value={stats?.pendingVerifications || 0}
+                    title="Total Users"
+                    value={stats?.totalUsers || 0}
                     icon={UserCheck}
                 />
                 <KpiCard
-                    title="Pending Proofs"
-                    value={stats?.pendingProofs || 0}
-                    icon={FileCheck}
+                    title="Total Jobs"
+                    value={stats?.totalJobs || 0}
+                    icon={Briefcase}
                 />
                 <KpiCard
-                    title="Pending Payouts"
-                    value={stats?.pendingPayouts || 0}
-                    icon={Wallet}
-                />
-                <KpiCard
-                    title="Paid This Month"
-                    value={formatCurrency(stats?.totalPaidThisMonth || 0)}
+                    title="Total Payouts"
+                    value={currencyFormatter.format((stats?.totalPayoutsCents || 0) / 100)}
                     icon={DollarSign}
+                />
+                <KpiCard
+                    title="Pending Banks"
+                    value={stats?.pendingBankVerifications || 0}
+                    icon={Building}
                 />
             </div>
 
-            {/* Action Queues */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Action Queues</CardTitle>
-                    <CardDescription>Items requiring your attention</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="mb-4 flex gap-2 border-b">
-                        <Button
-                            variant={activeTab === 'verifications' ? 'default' : 'ghost'}
-                            onClick={() => setActiveTab('verifications')}
-                            className="rounded-b-none"
-                        >
-                            ID Verifications ({verifications.length})
-                        </Button>
-                        <Button
-                            variant={activeTab === 'proofs' ? 'default' : 'ghost'}
-                            onClick={() => setActiveTab('proofs')}
-                            className="rounded-b-none"
-                        >
-                            Proof Approvals ({proofs.length})
-                        </Button>
-                        <Button
-                            variant={activeTab === 'payouts' ? 'default' : 'ghost'}
-                            onClick={() => setActiveTab('payouts')}
-                            className="rounded-b-none"
-                        >
-                            Payout Requests ({payouts.length})
-                        </Button>
-                    </div>
+            <h2 className="text-xl font-bold tracking-tight mt-8">Action Items</h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Link href="/admin/requests" className="block">
+                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer border-l-4 border-l-orange-500">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Proofs</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{stats?.pendingProofs || 0}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Jobs awaiting review</div>
+                        </CardContent>
+                    </Card>
+                </Link>
 
-                    {loading ? (
-                        <LoadingSkeletonTable rows={3} columns={4} />
-                    ) : (
-                        <>
-                            {activeTab === 'verifications' && (
-                                <div>
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Worker</TableHead>
-                                                <TableHead>Submitted</TableHead>
-                                                <TableHead>Status</TableHead>
-                                                <TableHead className="text-right">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {verifications.slice(0, 3).map((verification) => (
-                                                <TableRow key={verification.id}>
-                                                    <TableCell className="font-medium">
-                                                        {verification.worker.fullName}
-                                                    </TableCell>
-                                                    <TableCell>{formatDateTime(verification.submittedAt)}</TableCell>
-                                                    <TableCell>
-                                                        <StatusBadge status={verification.status} />
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="outline" size="sm" asChild>
-                                                            <Link href="/admin/verifications">Review</Link>
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                    <div className="mt-4 text-center">
-                                        <Button variant="outline" asChild>
-                                            <Link href="/admin/verifications">View All Verifications</Link>
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
+                <Link href="/admin/requests" className="block">
+                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer border-l-4 border-l-blue-500">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">ID Verifications</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{stats?.pendingIdVerifications || 0}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Identities awaiting review</div>
+                        </CardContent>
+                    </Card>
+                </Link>
 
-                            {activeTab === 'proofs' && (
-                                <div>
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Job</TableHead>
-                                                <TableHead>Worker</TableHead>
-                                                <TableHead>Submitted</TableHead>
-                                                <TableHead className="text-right">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {proofs.slice(0, 3).map((proof) => (
-                                                <TableRow key={proof.id}>
-                                                    <TableCell className="font-medium">{proof.job.title}</TableCell>
-                                                    <TableCell>{proof.job.worker?.fullName}</TableCell>
-                                                    <TableCell>{formatDateTime(proof.submittedAt)}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="outline" size="sm" asChild>
-                                                            <Link href="/admin/proofs">Review</Link>
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                    <div className="mt-4 text-center">
-                                        <Button variant="outline" asChild>
-                                            <Link href="/admin/proofs">View All Proofs</Link>
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
+                <Link href="/admin/requests" className="block">
+                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer border-l-4 border-l-green-500">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Payout Requests</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{stats?.pendingPayouts || 0}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Funds withdrawal requests</div>
+                        </CardContent>
+                    </Card>
+                </Link>
 
-                            {activeTab === 'payouts' && (
-                                <div>
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Worker</TableHead>
-                                                <TableHead>Amount</TableHead>
-                                                <TableHead>Requested</TableHead>
-                                                <TableHead className="text-right">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {payouts.slice(0, 3).map((payout) => (
-                                                <TableRow key={payout.id}>
-                                                    <TableCell className="font-medium">
-                                                        {payout.worker.fullName}
-                                                    </TableCell>
-                                                    <TableCell>{formatCurrency(payout.amount)}</TableCell>
-                                                    <TableCell>{formatDateTime(payout.createdAt)}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="outline" size="sm" asChild>
-                                                            <Link href="/admin/payouts">Review</Link>
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                    <div className="mt-4 text-center">
-                                        <Button variant="outline" asChild>
-                                            <Link href="/admin/payouts">View All Payouts</Link>
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </CardContent>
-            </Card>
+                <Link href="/admin/requests" className="block">
+                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer border-l-4 border-l-red-500">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Open Tickets</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{stats?.openTickets || 0}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Support tickets</div>
+                        </CardContent>
+                    </Card>
+                </Link>
+            </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-                {/* Quick Actions */}
+            <div className="grid gap-6 md:grid-cols-2 mt-8">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Quick Actions</CardTitle>
+                        <CardTitle>Quick Links</CardTitle>
                         <CardDescription>Common administrative tasks</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
                         <Button className="w-full justify-start" variant="outline" asChild>
-                            <Link href="/admin/users">
-                                <Plus className="mr-2 h-4 w-4" />
-                                Create Staff Account
-                            </Link>
-                        </Button>
-                        <Button className="w-full justify-start" variant="outline" asChild>
                             <Link href="/admin/services">
-                                <Plus className="mr-2 h-4 w-4" />
-                                Add New Service
+                                <Briefcase className="mr-2 h-4 w-4" /> Manage Services
                             </Link>
                         </Button>
                         <Button className="w-full justify-start" variant="outline" asChild>
-                            <Link href="/admin/settings">
-                                <SettingsIcon className="mr-2 h-4 w-4" />
-                                System Settings
+                            <Link href="/admin/finance">
+                                <Wallet className="mr-2 h-4 w-4" /> Financial Overview
                             </Link>
                         </Button>
-                    </CardContent>
-                </Card>
-
-                {/* Recent Activity */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Recent Activity</CardTitle>
-                        <CardDescription>Latest admin actions</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {auditLogs.slice(0, 5).map((log) => (
-                                <div key={log.id} className="flex items-start gap-3 text-sm">
-                                    <div className="mt-0.5 h-2 w-2 rounded-full bg-primary" />
-                                    <div className="flex-1">
-                                        <p className="font-medium">{log.action.replace(/_/g, ' ')}</p>
-                                        <p className="text-muted-foreground">
-                                            {log.actor?.fullName} • {formatDateTime(log.createdAt)}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="mt-4">
-                            <Button variant="outline" className="w-full" asChild>
-                                <Link href="/admin/audit-logs">View All Logs</Link>
-                            </Button>
-                        </div>
+                        <Button className="w-full justify-start" variant="outline" asChild>
+                            <Link href="/admin/jobs">
+                                <FileCheck className="mr-2 h-4 w-4" /> All Jobs
+                            </Link>
+                        </Button>
+                        <Button className="w-full justify-start" variant="outline" asChild>
+                            <Link href="/admin/users">
+                                <UserCheck className="mr-2 h-4 w-4" /> Manage Users
+                            </Link>
+                        </Button>
                     </CardContent>
                 </Card>
             </div>

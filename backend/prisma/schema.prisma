@@ -172,7 +172,54 @@ model User {
   @@map("users")
 }
 
-// ... (UserSession, TwoFactorChallenge, PasswordResetToken, VerificationToken, LoginAttempt)
+model UserSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique @db.VarChar(500)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+model TwoFactorChallenge {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String   @db.VarChar(10)
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@map("two_factor_challenges")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique @db.VarChar(255)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model VerificationToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique @db.VarChar(255)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@map("verification_tokens")
+}
 
 model VerificationHistory {
   id          String    @id @default(uuid()) @db.Uuid
@@ -795,4 +842,59 @@ model RolePermission {
   
   @@unique([role, permissionId])
   @@map("role_permissions")
+}
+
+model WorkerProfile {
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @unique @db.Uuid
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  bio               String?   @db.Text
+  skills            Json?
+  hourlyRateCents   Int?
+  
+  verificationStatus VerificationStatus @default(NOT_SUBMITTED)
+  
+  // Relations
+  bankDetails       BankDetails?
+  idVerifications   IdVerification[]
+  jobs              Job[]            @relation("WorkerJobs")
+  ratings           Rating[]         @relation("WorkerRatings")
+  performance       WorkerPerformance?
+  jobPayments       JobPayment[]
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@map("worker_profiles")
+}
+
+model FileObject {
+  id          String   @id @default(uuid()) @db.Uuid
+  purpose     FilePurpose
+  
+  // S3
+  key         String   @db.VarChar(500)
+  url         String   @db.VarChar(1000)
+  mimeType    String   @db.VarChar(100)
+  sizeBytes   Int
+  
+  // Ownership
+  uploadedBy  String   @db.Uuid
+  uploader    User     @relation(fields: [uploadedBy], references: [id])
+  
+  // Contexts
+  jobId       String?  @db.Uuid
+  job         Job?     @relation(fields: [jobId], references: [id])
+  
+  verificationId String? @db.Uuid
+  verification   IdVerification? @relation(fields: [verificationId], references: [id])
+
+  payoutReceiptId String? @db.Uuid
+  payoutReceipt   PayoutReceipt? @relation(fields: [payoutReceiptId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([uploadedBy])
+  @@map("file_objects")
 }

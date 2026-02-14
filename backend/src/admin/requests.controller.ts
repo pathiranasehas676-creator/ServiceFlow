@@ -140,6 +140,42 @@ export class RequestsController {
     }
 
     // ============================================
+    // BANK VERIFICATIONS
+    // ============================================
+
+    @Get('banks')
+    @Permissions('MANAGE_PAYOUTS')
+    @ApiOperation({ summary: 'Get all bank verification requests' })
+    @ApiQuery({ name: 'page', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'q', required: false, type: String })
+    async getBankRequests(@Query() dto: PaginationDto) {
+        return this.requestsService.getBankVerificationRequests(dto);
+    }
+
+    @Post('banks/:id/approve')
+    @Permissions('MANAGE_PAYOUTS')
+    @ApiOperation({ summary: 'Approve bank verification' })
+    async approveBank(
+        @Param('id') id: string,
+        @Body() dto: ApproveRequestDto,
+        @Req() req: any,
+    ) {
+        return this.requestsService.approveBankVerification(id, req.user.userId, dto);
+    }
+
+    @Post('banks/:id/reject')
+    @Permissions('MANAGE_PAYOUTS')
+    @ApiOperation({ summary: 'Reject bank verification' })
+    async rejectBank(
+        @Param('id') id: string,
+        @Body() dto: RejectRequestDto,
+        @Req() req: any,
+    ) {
+        return this.requestsService.rejectBankVerification(id, req.user.userId, dto);
+    }
+
+    // ============================================
     // SUPPORT TICKETS
     // ============================================
 

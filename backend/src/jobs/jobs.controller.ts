@@ -29,6 +29,13 @@ export class JobsController {
 
   // --- ADMIN / STAFF ENDPOINTS ---
 
+  @Get('admin/all')
+  @Roles('ADMIN', 'STAFF')
+  @ApiOperation({ summary: 'Admin list all jobs' })
+  async findAll(@Query() query: any) {
+    return this.jobsService.findAll(query);
+  }
+
   @Post()
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Create a new job posting' })

@@ -1,7 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/apiClient';
+import * as React from 'react';
+import { Search, User as UserIcon, Shield, AlertTriangle, RefreshCw } from 'lucide-react';
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
     Table,
     TableBody,
@@ -11,116 +19,157 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatDateTime } from '@/lib/utils';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal } from 'lucide-react';
-
-interface User {
-    id: string;
-    email: string;
-    fullName: string;
-    role: string;
-    isActive: boolean;
-    createdAt: string;
-    phoneNumber?: string;
-    workerProfile?: {
-        verificationStatus: string;
-    };
-}
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { toast } from 'sonner';
+import { apiClient } from '@/lib/api-client';
 
 export default function UsersPage() {
-    const [users, setUsers] = useState<User[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [users, setUsers] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [search, setSearch] = React.useState('');
 
-    useEffect(() => {
-        const fetchUsers = async () => {
-            try {
-                const data = await api.get<User[]>('/admin/users');
-                if (Array.isArray(data)) {
-                    setUsers(data);
-                } else {
-                    console.error("Expected array but got:", data);
-                    setUsers([]);
-                }
-            } catch (err: any) {
-                console.error("Failed to fetch users:", err);
-                setError(err.message || 'Failed to fetch users');
-            } finally {
-                setLoading(false);
-            }
-        };
+    const fetchUsers = async () => {
+        setLoading(true);
+        try {
+            const response = await apiClient.get('/admin/users');
+            setUsers(response.data);
+        } catch (error) {
+            toast.error('Failed to load users');
+        } finally {
+            setLoading(false);
+        }
+    };
 
+    React.useEffect(() => {
         fetchUsers();
     }, []);
 
-    if (loading) {
-        return <div className="p-8">Loading users...</div>;
-    }
+    const handleBlacklist = async (id: string) => {
+        const reason = prompt('Enter reason for blacklisting:');
+        if (!reason) return;
+        try {
+            await apiClient.post(`/admin/users/${id}/blacklist`, { reason });
+            toast.success('User blacklisted');
+            fetchUsers();
+        } catch (error) {
+            toast.error('Failed to blacklist user');
+        }
+    };
 
-    if (error) {
-        return (
-            <div className="p-8">
-                <Alert variant="destructive">
-                    <Terminal className="h-4 w-4" />
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
-                </Alert>
-            </div>
-        );
-    }
+    const filteredUsers = users.filter((u) =>
+        u.fullName?.toLowerCase().includes(search.toLowerCase()) ||
+        u.email?.toLowerCase().includes(search.toLowerCase())
+    );
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Users & Roles</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Users Management</h1>
+                    <p className="text-muted-foreground">Manage user accounts, roles, and access.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={fetchUsers}>
+                        <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+                    </Button>
+                </div>
+            </div>
 
             <Card>
-                <CardHeader>
-                    <CardTitle>All Users ({users.length})</CardTitle>
+                <CardHeader className="pb-3 border-b">
+                    <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                            <UserIcon className="h-5 w-5 text-indigo-500" /> All Users
+                        </CardTitle>
+                        <div className="relative w-80">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Search by name or email..."
+                                className="pl-9 bg-muted/20"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                        </div>
+                    </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                     <Table>
-                        <TableHeader>
+                        <TableHeader className="bg-muted/30">
                             <TableRow>
-                                <TableHead>User</TableHead>
+                                <TableHead className="pl-6">User</TableHead>
                                 <TableHead>Role</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead>KYC</TableHead>
-                                <TableHead>Joined</TableHead>
+                                <TableHead>Verification</TableHead>
+                                <TableHead className="text-right pr-6">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {users.map((user) => (
-                                <TableRow key={user.id}>
-                                    <TableCell>
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">{user.fullName}</span>
-                                            <span className="text-xs text-muted-foreground">{user.email}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline">{user.role}</Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant={user.isActive ? 'default' : 'destructive'}>
-                                            {user.isActive ? 'Active' : 'Inactive'}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        {user.workerProfile ? (
-                                            <Badge variant="secondary">
-                                                {user.workerProfile.verificationStatus}
+                            {loading ? (
+                                <TableRow><TableCell colSpan={5} className="h-24 text-center">Loading...</TableCell></TableRow>
+                            ) : filteredUsers.length === 0 ? (
+                                <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No users found.</TableCell></TableRow>
+                            ) : (
+                                filteredUsers.map((user) => (
+                                    <TableRow key={user.id} className="group hover:bg-muted/5 transition-colors">
+                                        <TableCell className="pl-6 py-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-slate-100 rounded-full h-8 w-8 flex items-center justify-center font-bold text-slate-500 text-xs border border-slate-200">
+                                                    {user.fullName?.[0] || 'U'}
+                                                </div>
+                                                <div>
+                                                    <div className="font-medium text-slate-900">{user.fullName}</div>
+                                                    <div className="text-xs text-muted-foreground">{user.email}</div>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="border-indigo-200 text-indigo-700 bg-indigo-50">
+                                                {user.role}
                                             </Badge>
-                                        ) : (
-                                            <span className="text-muted-foreground">-</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-sm">
-                                        {formatDateTime(user.createdAt)}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={user.isActive ? 'default' : 'destructive'} className={user.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : ''}>
+                                                {user.isActive ? 'Active' : 'Suspended'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {user.workerProfile ? (
+                                                <Badge variant="outline" className={`
+                                                    ${user.workerProfile.verificationStatus === 'VERIFIED' ? 'bg-blue-50 text-blue-700 border-blue-200' : ''}
+                                                `}>
+                                                    {user.workerProfile.verificationStatus}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">-</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-right pr-6">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                        <span className="sr-only">Open menu</span>
+                                                        <Shield className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem className="text-red-600 focus:text-red-700 focus:bg-red-50" onClick={() => handleBlacklist(user.id)}>
+                                                        <AlertTriangle className="mr-2 h-4 w-4" /> Blacklist User
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
                         </TableBody>
                     </Table>
                 </CardContent>

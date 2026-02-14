@@ -284,4 +284,37 @@ export class JobsService {
       return updatedJob;
     });
   }
+  async findAll(filters: any) {
+    const { page = 1, limit = 20, status, q } = filters;
+    const skip = (page - 1) * limit;
+    const where: any = {};
+    if (status) where.status = status;
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { creator: { fullName: { contains: q, mode: 'insensitive' } } },
+        { worker: { user: { fullName: { contains: q, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const [jobs, total] = await Promise.all([
+      this.prisma.job.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          creator: { select: { fullName: true, email: true } },
+          worker: { include: { user: { select: { fullName: true, email: true } } } },
+        },
+      }),
+      this.prisma.job.count({ where }),
+    ]);
+
+    return {
+      data: jobs,
+      meta: { total, page, limit, totalPages: Math.ceil(total / Number(limit)) },
+    };
+  }
 }

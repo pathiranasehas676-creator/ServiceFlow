@@ -16,6 +16,8 @@ import { EmailModule } from './common/email/email.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { RiskModule } from './risk/risk.module';
 import { KycModule } from './kyc/kyc.module';
+import { AdminServicesModule } from './admin/services/services.module';
+import { AdminFinanceModule } from './admin/finance/finance.module';
 
 import { EventEmitterModule } from '@nestjs/event-emitter';
 

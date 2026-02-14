@@ -117,7 +117,7 @@ export class RequestsService {
             });
 
             // Credit worker wallet
-            if (job.workerId) {
+            if (job.workerId && job.worker) {
                 const wallet = await tx.wallet.findUnique({
                     where: { userId: job.worker.userId },
                 });
@@ -622,6 +622,156 @@ export class RequestsService {
             return updatedVerification;
         });
 
+        return updated;
+    }
+
+    // ============================================
+    // BANK VERIFICATIONS
+    // ============================================
+
+    async getBankVerificationRequests(dto: PaginationDto) {
+        const { page = 1, limit = 20, q } = dto;
+        const skip = (page - 1) * limit;
+
+        const where: any = {
+            isVerified: false,
+            NOT: {
+                accountNumberHash: null
+            }
+        };
+
+        if (q) {
+            where.workerProfile = {
+                user: {
+                    OR: [
+                        { fullName: { contains: q, mode: 'insensitive' } },
+                        { email: { contains: q, mode: 'insensitive' } },
+                    ],
+                },
+            };
+        }
+
+        const [banks, total] = await Promise.all([
+            this.prisma.bankDetails.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { updatedAt: 'desc' },
+                include: {
+                    workerProfile: {
+                        include: {
+                            user: { select: { id: true, fullName: true, email: true, phoneNumber: true, verificationLevel: true } as any },
+                        },
+                    },
+                },
+            }),
+            this.prisma.bankDetails.count({ where }),
+        ]);
+
+        return {
+            data: banks,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
+
+    async approveBankVerification(bankId: string, adminId: string, dto: ApproveRequestDto) {
+        const bank = await this.prisma.bankDetails.findUnique({
+            where: { id: bankId },
+            include: { workerProfile: { include: { user: true } } },
+        });
+
+        if (!bank) throw new NotFoundException('Bank details not found');
+        if (bank.isVerified) throw new BadRequestException('Bank is already verified');
+
+        const updated = await this.prisma.$transaction(async (tx) => {
+            const updatedBank = await tx.bankDetails.update({
+                where: { id: bankId },
+                data: {
+                    isVerified: true,
+                    bankVerifiedAt: new Date(),
+                } as any,
+                include: { workerProfile: { include: { user: true } } },
+            });
+
+            const workerProfile = (updatedBank as any).workerProfile;
+
+            if (workerProfile.user.verificationLevel < 3) {
+                await tx.user.update({
+                    where: { id: workerProfile.userId },
+                    data: { verificationLevel: 3 } as any,
+                });
+            }
+
+            // Manually logging to verificationHistory using any cast if necessary or ensure model exists
+            await (tx as any).verificationHistory.create({
+                data: {
+                    userId: (updatedBank as any).workerProfile.userId,
+                    adminId,
+                    action: 'APPROVED',
+                    type: 'BANK',
+                    reason: dto.note || 'Bank details verified',
+                    previousStatus: 'PENDING',
+                    newStatus: 'APPROVED'
+                }
+            });
+
+            await tx.adminAuditLog.create({
+                data: {
+                    actorId: adminId,
+                    actorEmail: 'admin@system',
+                    action: (AuditAction as any).VERIFICATION_APPROVED || 'VERIFICATION_APPROVED',
+                    actionDetail: `Verified bank details for ${(updatedBank as any).workerProfile.user.fullName}`,
+                    entityType: 'BankDetails',
+                    entityId: bankId,
+                    newValue: { isVerified: true } as any,
+                },
+            });
+
+            return updatedBank;
+        });
+
+        return updated;
+    }
+
+    async rejectBankVerification(bankId: string, adminId: string, dto: RejectRequestDto) {
+        const bank = await this.prisma.bankDetails.findUnique({
+            where: { id: bankId },
+            include: { workerProfile: { include: { user: true } } },
+        });
+
+        if (!bank) throw new NotFoundException('Bank details not found');
+
+        const updated = await this.prisma.$transaction(async (tx) => {
+            await (tx as any).verificationHistory.create({
+                data: {
+                    userId: (bank as any).workerProfile.userId,
+                    adminId,
+                    action: 'REJECTED',
+                    type: 'BANK',
+                    reason: dto.reason,
+                    previousStatus: 'PENDING',
+                    newStatus: 'REJECTED'
+                }
+            });
+
+            await tx.adminAuditLog.create({
+                data: {
+                    actorId: adminId,
+                    actorEmail: 'admin@system',
+                    action: (AuditAction as any).VERIFICATION_REJECTED || 'VERIFICATION_REJECTED',
+                    actionDetail: `Rejected bank details for ${(bank as any).workerProfile.user.fullName}`,
+                    entityType: 'BankDetails',
+                    entityId: bankId,
+                    newValue: { rejectionReason: dto.reason } as any,
+                },
+            });
+            return bank;
+        });
         return updated;
     }
 

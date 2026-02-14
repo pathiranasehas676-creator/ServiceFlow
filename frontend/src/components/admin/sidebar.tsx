@@ -25,38 +25,22 @@ const navigationGroups = [
         title: 'Overview',
         items: [
             { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+            { name: 'Requests Inbox', href: '/admin/requests', icon: FileCheck },
             { name: 'Job Board', href: '/admin/jobs', icon: Briefcase },
-            { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
-        ]
-    },
-    {
-        title: 'Governance',
-        items: [
-            { name: 'Verifications', href: '/admin/verifications', icon: UserCheck },
-            { name: 'Proof Approvals', href: '/admin/proofs', icon: FileCheck },
-            { name: 'Payouts', href: '/admin/payouts', icon: Wallet },
-            { name: 'Audit Logs', href: '/admin/audit-logs', icon: FileText },
-        ]
-    },
-    {
-        title: 'Security',
-        items: [
-            { name: 'Security Alerts', href: '/admin/security/alerts', icon: ShieldAlert },
-            { name: 'Permissions', href: '/admin/settings/permissions', icon: Lock },
-            { name: 'Active Sessions', href: '/admin/settings/sessions', icon: Clock },
         ]
     },
     {
         title: 'Management',
         items: [
-            { name: 'Users & Roles', href: '/admin/users', icon: Users },
             { name: 'Services', href: '/admin/services', icon: Briefcase },
+            { name: 'Finance', href: '/admin/finance', icon: Wallet },
+            { name: 'Users & Roles', href: '/admin/users', icon: Users },
         ]
     },
     {
-        title: 'Infrastructure',
+        title: 'System',
         items: [
-            { name: 'System Health', href: '/admin/system/health', icon: Activity },
+            { name: 'Audit Logs', href: '/admin/audit-logs', icon: FileText },
             { name: 'Settings', href: '/admin/settings', icon: Settings },
         ]
     }

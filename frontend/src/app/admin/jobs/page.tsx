@@ -1,31 +1,50 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import * as React from 'react';
+import { Search, Briefcase, MapPin, Calendar, Filter, RefreshCw } from 'lucide-react';
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { StatusBadge } from '@/components/admin/status-badge';
-import { LoadingSkeletonTable } from '@/components/admin/loading-skeleton-table';
-import { Search, Briefcase, MapPin, Calendar, User, Map as MapIcon, List } from 'lucide-react';
-import { formatCurrency, formatDateTime } from '@/lib/utils';
-import { apiClient } from '@/lib/api-client';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
-import Link from 'next/link';
+import { apiClient } from '@/lib/api-client';
+import { format } from 'date-fns';
 
 export default function JobsPage() {
-    const [jobs, setJobs] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<string>('ALL');
-    const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+    const [jobs, setJobs] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [search, setSearch] = React.useState('');
+    const [statusFilter, setStatusFilter] = React.useState<string>('ALL');
 
-    const loadJobs = async () => {
+    const fetchJobs = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/admin/jobs');
-            setJobs(Array.isArray(response.data) ? response.data : []);
+            const params: any = {};
+            if (statusFilter !== 'ALL') params.status = statusFilter;
+            if (search) params.q = search;
+
+            const response = await apiClient.get('/jobs/admin/all', { params });
+            setJobs(response.data.data);
         } catch (error) {
             toast.error('Failed to load jobs');
         } finally {
@@ -33,152 +52,122 @@ export default function JobsPage() {
         }
     };
 
-    useEffect(() => {
-        loadJobs();
-    }, []);
+    React.useEffect(() => {
+        fetchJobs();
+    }, [statusFilter]);
 
-    const filteredJobs = jobs.filter((j) => {
-        const matchesSearch =
-            j.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            j.worker?.fullName?.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesStatus = statusFilter === 'ALL' || j.status === statusFilter;
-        return matchesSearch && matchesStatus;
-    });
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        fetchJobs();
+    };
 
     return (
-        <div className="space-y-6 pb-12">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-black tracking-tight text-slate-900">Platform Operations</h1>
-                <p className="text-muted-foreground font-medium">Monitor and manage all service requests.</p>
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Jobs Management</h1>
+                    <p className="text-muted-foreground">Monitor and manage all service requests.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={fetchJobs}>
+                        <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+                    </Button>
+                </div>
             </div>
 
-            <Card className="border-none shadow-xl bg-white">
-                <CardHeader className="bg-slate-50/50 border-b p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                        <div className="space-y-1">
-                            <CardTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                <Briefcase className="h-5 w-5 text-indigo-500" />
-                                Active Jobs
-                            </CardTitle>
-                            <div className="flex gap-2 flex-wrap">
-                                {['ALL', 'POSTED', 'ACCEPTED', 'ARRIVED', 'COMPLETED'].map(status => (
-                                    <Badge
-                                        key={status}
-                                        variant={statusFilter === status ? 'default' : 'outline'}
-                                        className="cursor-pointer"
-                                        onClick={() => setStatusFilter(status)}
-                                    >
-                                        {status}
-                                    </Badge>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4 w-full sm:w-auto">
-                            <div className="bg-slate-100 p-1 rounded-lg flex items-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={viewMode === 'list' ? 'bg-white shadow-sm' : ''}
-                                    onClick={() => setViewMode('list')}
-                                >
-                                    <List className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={viewMode === 'map' ? 'bg-white shadow-sm' : ''}
-                                    onClick={() => setViewMode('map')}
-                                >
-                                    <MapIcon className="h-4 w-4" />
-                                </Button>
-                            </div>
-                            <div className="relative flex-1 sm:w-64">
-                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+            <Card>
+                <CardHeader className="pb-3 border-b">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                            <Briefcase className="h-5 w-5 text-indigo-500" /> Job Listings
+                        </CardTitle>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <Select value={statusFilter} onValueChange={setStatusFilter}>
+                                <SelectTrigger className="w-[180px]">
+                                    <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
+                                    <SelectValue placeholder="Filter Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ALL">All Statuses</SelectItem>
+                                    <SelectItem value="POSTED">Posted</SelectItem>
+                                    <SelectItem value="ACCEPTED">Accepted</SelectItem>
+                                    <SelectItem value="ARRIVED">Arrived</SelectItem>
+                                    <SelectItem value="PROOF_SUBMITTED">Proof Submitted</SelectItem>
+                                    <SelectItem value="APPROVED">Approved</SelectItem>
+                                    <SelectItem value="COMPLETED">Completed</SelectItem>
+                                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <form onSubmit={handleSearch} className="relative flex-1 sm:w-80">
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                 <Input
                                     placeholder="Search jobs..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="pl-10 h-10"
-                                    disabled={viewMode === 'map'}
+                                    className="pl-9 bg-muted/20"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
                                 />
-                            </div>
+                            </form>
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                    {loading ? (
-                        <div className="p-6">
-                            <LoadingSkeletonTable rows={10} columns={6} />
-                        </div>
-                    ) : viewMode === 'map' ? (
-                        <div className="h-[600px] w-full flex items-center justify-center bg-slate-100 text-slate-400">
-                            Map View Placeholder (Connect to Google Maps API)
-                        </div>
-                    ) : filteredJobs.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-24 text-center bg-slate-50/30">
-                            <Briefcase className="h-12 w-12 text-slate-300 mb-4" />
-                            <h3 className="text-lg font-bold text-slate-900">No Jobs Found</h3>
-                            <p className="text-slate-500">Try adjusting your filters.</p>
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader className="bg-slate-50/80">
-                                <TableRow className="hover:bg-transparent border-slate-100">
-                                    <TableHead className="font-bold text-slate-700">Job Title</TableHead>
-                                    <TableHead className="font-bold text-slate-700">Assignments</TableHead>
-                                    <TableHead className="font-bold text-slate-700">Location</TableHead>
-                                    <TableHead className="font-bold text-slate-700">Budget</TableHead>
-                                    <TableHead className="font-bold text-slate-700">Scheduled</TableHead>
-                                    <TableHead className="font-bold text-slate-700">Status</TableHead>
-                                    <TableHead className="text-right font-bold text-slate-700">Action</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredJobs.map((job) => (
-                                    <TableRow key={job.id} className="hover:bg-slate-50/50 group">
-                                        <TableCell>
-                                            <div className="font-medium text-slate-900 group-hover:text-indigo-600 transition-colors cursor-pointer">
-                                                {job.title}
+                    <Table>
+                        <TableHeader className="bg-muted/30">
+                            <TableRow>
+                                <TableHead className="pl-6">Job Details</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Customer</TableHead>
+                                <TableHead>Worker</TableHead>
+                                <TableHead className="text-right pr-6">Price</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow><TableCell colSpan={5} className="h-24 text-center">Loading...</TableCell></TableRow>
+                            ) : jobs.length === 0 ? (
+                                <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No jobs found.</TableCell></TableRow>
+                            ) : (
+                                jobs.map((job) => (
+                                    <TableRow key={job.id} className="group hover:bg-muted/5 transition-colors">
+                                        <TableCell className="pl-6 py-4">
+                                            <div className="font-medium text-slate-900">{job.title}</div>
+                                            <div className="text-xs text-muted-foreground line-clamp-1">{job.description}</div>
+                                            <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
+                                                <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {job.district}</span>
+                                                <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {format(new Date(job.createdAt), 'MMM dd, HH:mm')}</span>
                                             </div>
-                                            <div className="text-xs text-muted-foreground font-mono">ID: {job.id.slice(0, 8)}...</div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={`
+                                                ${job.status === 'POSTED' ? 'bg-blue-50 text-blue-700 border-blue-200' : ''}
+                                                ${job.status === 'COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' : ''}
+                                                ${job.status === 'CANCELLED' ? 'bg-red-50 text-red-700 border-red-200' : ''}
+                                            `}>
+                                                {job.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="text-sm">{job.creator?.fullName || 'Unknown'}</div>
+                                            <div className="text-xs text-muted-foreground">{job.creator?.email}</div>
                                         </TableCell>
                                         <TableCell>
                                             {job.worker ? (
-                                                <div className="flex items-center gap-2">
-                                                    <div className="h-6 w-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold">
-                                                        {job.worker.fullName.charAt(0)}
-                                                    </div>
-                                                    <div className="text-sm">{job.worker.fullName}</div>
-                                                </div>
+                                                <>
+                                                    <div className="text-sm">{job.worker.user?.fullName}</div>
+                                                    <div className="text-xs text-muted-foreground">{job.worker.user?.email}</div>
+                                                </>
                                             ) : (
-                                                <Badge variant="outline" className="text-slate-400 border-dashed">Unassigned</Badge>
+                                                <span className="text-xs text-muted-foreground italic">Unassigned</span>
                                             )}
                                         </TableCell>
-                                        <TableCell className="max-w-[200px]">
-                                            <div className="flex items-center gap-1 text-slate-600 truncate">
-                                                <MapPin className="h-3 w-3 shrink-0" />
-                                                <span className="truncate text-xs">{job.location?.address || 'Start Coordinate'}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="font-mono font-bold text-slate-900">
-                                            {formatCurrency(job.budget)}
-                                        </TableCell>
-                                        <TableCell className="text-xs text-slate-500">
-                                            {formatDateTime(job.createdAt)}
-                                        </TableCell>
-                                        <TableCell>
-                                            <StatusBadge status={job.status} />
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button variant="ghost" size="sm" asChild>
-                                                <Link href={`/admin/jobs/${job.id}`}>Manage</Link>
-                                            </Button>
+                                        <TableCell className="text-right pr-6 font-bold text-slate-700">
+                                            ${(job.priceCents / 100).toFixed(2)}
                                         </TableCell>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
         </div>

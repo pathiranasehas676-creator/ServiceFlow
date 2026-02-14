@@ -55,18 +55,28 @@ export class AdminService implements OnModuleInit {
   }
 
   async getStats() {
-    const [users, jobs, payouts] = await Promise.all([
+    const [users, jobs, payouts, pendingProofs, pendingPayouts, pendingIdVerifications, pendingBankVerifications, openTickets] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.job.count(),
       this.prisma.payoutRequest.aggregate({
         _sum: { amountCents: true },
         where: { status: 'PAID' },
       }),
+      this.prisma.job.count({ where: { status: 'PROOF_SUBMITTED' } }),
+      this.prisma.payoutRequest.count({ where: { status: 'PENDING' } }),
+      this.prisma.idVerification.count({ where: { status: 'PENDING' } }),
+      this.prisma.bankDetails.count({ where: { isVerified: false, NOT: { accountNumberHash: null } } }),
+      this.prisma.supportTicket.count({ where: { status: 'OPEN' } }),
     ]);
     return {
       totalUsers: users,
       totalJobs: jobs,
       totalPayoutsCents: payouts._sum.amountCents || 0,
+      pendingProofs,
+      pendingPayouts,
+      pendingIdVerifications,
+      pendingBankVerifications,
+      openTickets
     };
   }
 

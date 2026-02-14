@@ -2,18 +2,18 @@
 
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProofApprovalsTab } from '@/components/admin/requests/proof-approvals-tab';
 import { PayoutRequestsTab } from '@/components/admin/requests/payout-requests-tab';
 import { VerificationRequestsTab } from '@/components/admin/requests/verification-requests-tab';
 import { SupportTicketsTab } from '@/components/admin/requests/support-tickets-tab';
-import { FileCheck, DollarSign, ShieldCheck, MessageSquare } from 'lucide-react';
+import { BankVerificationsTab } from '@/components/admin/requests/bank-verifications-tab';
+import { FileCheck, DollarSign, ShieldCheck, MessageSquare, Building } from 'lucide-react';
 
 export default function RequestsPage() {
     const [activeTab, setActiveTab] = useState('proofs');
 
     return (
-        <div className="container mx-auto p-6 space-y-6">
+        <div className="container mx-auto space-y-6">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Requests Inbox</h1>
                 <p className="text-muted-foreground mt-2">
@@ -22,23 +22,28 @@ export default function RequestsPage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
-                    <TabsTrigger value="proofs" className="gap-2">
+                <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid h-auto p-1">
+                    <TabsTrigger value="proofs" className="gap-2 py-2">
                         <FileCheck className="h-4 w-4" />
                         <span className="hidden sm:inline">Proof Approvals</span>
                         <span className="sm:hidden">Proofs</span>
                     </TabsTrigger>
-                    <TabsTrigger value="payouts" className="gap-2">
+                    <TabsTrigger value="payouts" className="gap-2 py-2">
                         <DollarSign className="h-4 w-4" />
                         <span className="hidden sm:inline">Payout Requests</span>
                         <span className="sm:hidden">Payouts</span>
                     </TabsTrigger>
-                    <TabsTrigger value="verifications" className="gap-2">
+                    <TabsTrigger value="verifications" className="gap-2 py-2">
                         <ShieldCheck className="h-4 w-4" />
                         <span className="hidden sm:inline">ID Verifications</span>
                         <span className="sm:hidden">IDs</span>
                     </TabsTrigger>
-                    <TabsTrigger value="tickets" className="gap-2">
+                    <TabsTrigger value="banks" className="gap-2 py-2">
+                        <Building className="h-4 w-4" />
+                        <span className="hidden sm:inline">Bank Verific.</span>
+                        <span className="sm:hidden">Banks</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="tickets" className="gap-2 py-2">
                         <MessageSquare className="h-4 w-4" />
                         <span className="hidden sm:inline">Support Tickets</span>
                         <span className="sm:hidden">Tickets</span>
@@ -55,6 +60,10 @@ export default function RequestsPage() {
 
                 <TabsContent value="verifications" className="space-y-4">
                     <VerificationRequestsTab />
+                </TabsContent>
+
+                <TabsContent value="banks" className="space-y-4">
+                    <BankVerificationsTab />
                 </TabsContent>
 
                 <TabsContent value="tickets" className="space-y-4">
