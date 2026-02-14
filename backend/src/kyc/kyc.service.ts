@@ -84,8 +84,7 @@ export class KycService {
             await tx.workerProfile.update({
                 where: { id: verification.workerProfileId },
                 data: {
-                    verificationStatus: status,
-                    verifiedAt: approved ? new Date() : null
+                    verificationStatus: status
                 }
             });
 

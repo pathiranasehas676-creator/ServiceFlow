@@ -546,7 +546,6 @@ export class RequestsService {
                 where: { id: verification.workerProfileId },
                 data: {
                     verificationStatus: VerificationStatus.APPROVED,
-                    verifiedAt: new Date(),
                 },
             });
 
