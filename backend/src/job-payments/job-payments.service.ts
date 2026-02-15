@@ -5,14 +5,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
-import { JobPaymentStatus, Prisma } from '@prisma/client';
+import { JobPaymentStatus, Prisma, TransactionType } from '@prisma/client';
 
 @Injectable()
 export class JobPaymentsService {
   constructor(
     private prisma: PrismaService,
     private walletService: WalletService,
-  ) {}
+  ) { }
 
   // Create payment explicitly (e.g. on Proof Approval)
   async createPayment(jobId: string, adminId: string) {
@@ -62,6 +62,7 @@ export class JobPaymentsService {
     return this.prisma.$transaction(async (tx) => {
       const payment = await tx.jobPayment.findUnique({
         where: { id: paymentId },
+        include: { worker: true },
       });
       if (!payment) throw new NotFoundException('Payment not found');
       if (payment.status !== 'PENDING' && payment.status !== 'ON_HOLD') {
@@ -81,13 +82,14 @@ export class JobPaymentsService {
       });
 
       // Credit Wallet
-      await this.walletService.creditWallet(
-        payment.workerId,
+      // Credit Wallet
+      await this.walletService.credit(
+        payment.worker.userId,
         payment.amountCents,
-        'CREDIT', // TransactionType
+        `Payment for Job #${payment.jobId}`,
         'JOB_PAYMENT',
         payment.id,
-        `Payment for Job #${payment.jobId}`,
+        TransactionType.CREDIT,
         tx,
       );
 

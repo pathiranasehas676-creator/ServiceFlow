@@ -5,9 +5,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { JobStatus, UserRole } from '@prisma/client';
+import { JobStatus, UserRole, TransactionType } from '@prisma/client';
 import { calculateDistance } from '../common/utils/geo.utils';
 import { StorageService } from '../storage/storage.service';
+import { WalletService } from '../wallet/wallet.service';
 
 @Injectable()
 export class JobsService {
@@ -16,6 +17,7 @@ export class JobsService {
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,
+    private walletService: WalletService,
   ) { }
 
   async createJob(dto: any, creatorId: string) {
@@ -252,6 +254,17 @@ export class JobsService {
 
       if (decision === 'APPROVE') {
         newStatus = JobStatus.APPROVED;
+
+        // Credit Worker Wallet
+        await this.walletService.credit(
+          job.worker!.userId, // Worker is guaranteed if status is PROOF_SUBMITTED (logic check)
+          job.priceCents,
+          `Payment for Job: ${job.title}`,
+          'JOB',
+          job.id,
+          TransactionType.CREDIT,
+          tx,
+        );
       } else {
         newStatus = JobStatus.ARRIVED; // Revert to ARRIVED so they can resubmit proof
       }

@@ -26,7 +26,7 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('storage')
 export class StorageController {
-  constructor(private readonly storageService: StorageService) {}
+  constructor(private readonly storageService: StorageService) { }
 
   // ============================================
   // WORKER: ID VERIFICATION UPLOADS
@@ -128,6 +128,25 @@ export class StorageController {
   // ============================================
   // ADMIN/STAFF: FILE PREVIEW
   // ============================================
+
+  // ============================================
+  // ADMIN: PAYOUT RECEIPT UPLOADS
+  // ============================================
+
+  @Post('receipt/presign')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Get presigned URL for payout receipt upload' })
+  async presignReceiptUpload(
+    @Body() dto: { mimeType: string; sizeBytes: number },
+    @Req() req: any,
+  ) {
+    return this.storageService.generatePresignedPutUrl(
+      req.user.id,
+      FilePurpose.PAYOUT_RECEIPT,
+      dto.mimeType,
+      dto.sizeBytes,
+    );
+  }
 
   @Get('preview')
   @Roles('ADMIN', 'STAFF', 'WORKER')

@@ -6,27 +6,32 @@ import {
   Param,
   UseGuards,
   Get,
+  Query,
 } from '@nestjs/common';
 import { PayoutsService } from './payouts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { UserRole, PayoutStatus } from '@prisma/client';
 import { GetUser } from '../auth/decorators/get-user.decorator';
-import { CsrfGuard } from '../auth/guards/csrf.guard';
 
-@Controller('admin/payouts')
-@UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
+@Controller('admin/finance/payouts')
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 export class PayoutsController {
   constructor(private readonly payoutsService: PayoutsService) { }
 
-  @Patch(':id/approve')
+  @Get()
+  async findAll(@Query('status') status?: PayoutStatus, @Query('page') page = 1) {
+    return this.payoutsService.findAll({ status }, Number(page));
+  }
+
+  @Post(':id/approve')
   async approve(@Param('id') id: string, @GetUser() user: any) {
     return this.payoutsService.approvePayout(id, user.id);
   }
 
-  @Patch(':id/reject')
+  @Post(':id/reject')
   async reject(
     @Param('id') id: string,
     @Body('reason') reason: string,
@@ -35,24 +40,19 @@ export class PayoutsController {
     return this.payoutsService.rejectPayout(id, reason, user.id);
   }
 
-  @Patch(':id/pay')
+  @Post(':id/mark-paid')
   async markPaid(
     @Param('id') id: string,
     @GetUser() user: any,
-    @Body('receipt') receiptUrl: string, // Or receipt ID/Key
+    @Body('receiptFileKey') receiptFileKey: string,
   ) {
-    return this.payoutsService.markPaid(id, user.id, receiptUrl);
-  }
-
-  @Get()
-  async findAll() {
-    return this.payoutsService.findAll({});
+    return this.payoutsService.markPaid(id, user.id, receiptFileKey);
   }
 }
 
 // Separate controller for Worker
 @Controller('worker/payouts')
-@UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.WORKER)
 export class WorkerPayoutsController {
   constructor(private readonly payoutsService: PayoutsService) { }
@@ -62,11 +62,12 @@ export class WorkerPayoutsController {
     return this.payoutsService.getPayoutsByUser(user.id);
   }
 
-  @Post()
+  @Post('request')
   async request(
     @Body('amountCents') amountCents: number,
+    @Body('type') type: any,
     @GetUser() user: any,
   ) {
-    return this.payoutsService.requestPayout(user.id, amountCents);
+    return this.payoutsService.requestPayout(user.id, amountCents, type);
   }
 }

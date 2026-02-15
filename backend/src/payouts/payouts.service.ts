@@ -5,52 +5,55 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
-import { PayoutStatus, PayoutType } from '@prisma/client';
-import { StorageService } from '../storage/storage.service';
+import { PayoutStatus, PayoutType, AuditAction } from '@prisma/client';
 
 @Injectable()
 export class PayoutsService {
   constructor(
     private prisma: PrismaService,
     private walletService: WalletService,
-    private storageService: StorageService,
   ) { }
 
+  /**
+   * Worker requests a payout
+   */
   async requestPayout(
-    workerId: string,
+    userId: string,
     amountCents: number,
-    type: PayoutType = 'SPECIAL',
+    type: PayoutType = 'WEEKLY',
   ) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId: workerId },
-    });
-    if (!wallet) throw new NotFoundException('Wallet not found');
+    // 1. Validate
+    if (amountCents < 500) {
+      throw new BadRequestException('Minimum payout amount is $5.00');
+    }
 
-    if (amountCents < 500)
-      throw new BadRequestException('Minimum payout is $5.00');
-    if (wallet.availableBalanceCents < amountCents)
+    const wallet = await this.walletService.ensureWallet(userId);
+    if (wallet.availableBalanceCents < amountCents) {
       throw new BadRequestException('Insufficient available balance');
+    }
 
-    // Idempotency: prevent duplicates?
-    // Logic: lock funds first
+    // Checking KYC ideally happens here too
+    // const bank = ... if (!bank.isVerified) throw error
 
     return this.prisma.$transaction(async (tx) => {
+      // 2. Create Payout Request
       const payout = await tx.payoutRequest.create({
         data: {
           walletId: wallet.id,
           amountCents,
           type,
-          status: 'PENDING',
-          idempotencyKey: `PAYOUT:${workerId}:${Date.now()}`, // Ideally use unique request source
+          status: PayoutStatus.PENDING,
+          idempotencyKey: `PAYOUT:${userId}:${Date.now()}`,
         },
       });
 
-      await this.walletService.lockFunds(
-        workerId,
+      // 3. Hold Funds in Wallet (Available -> Pending)
+      await this.walletService.hold(
+        userId,
         amountCents,
+        `Payout Request (${type})`,
         'PAYOUT_REQUEST',
         payout.id,
-        `Requested payout of ${amountCents / 100}`,
         tx,
       );
 
@@ -58,109 +61,171 @@ export class PayoutsService {
     });
   }
 
-  async approvePayout(id: string, adminId: string) {
+  /**
+   * Admin approves payout (Status Update Only)
+   */
+  async approvePayout(payoutId: string, adminId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const payout = await tx.payoutRequest.findUnique({ where: { id } });
-      if (!payout || payout.status !== 'PENDING')
-        throw new BadRequestException('Invalid payout status');
-
-      const updated = await tx.payoutRequest.update({
-        where: { id },
-        data: {
-          status: 'APPROVED',
-          reviewedBy: adminId,
-          reviewedAt: new Date(),
-        },
-      });
-
-      // Audit logic here if needed, or in controller
-      return updated;
-    });
-  }
-
-  async rejectPayout(id: string, reason: string, adminId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      const payout = await tx.payoutRequest.findUnique({ where: { id } });
-      if (
-        !payout ||
-        (payout.status !== 'PENDING' && payout.status !== 'APPROVED')
-      ) {
-        throw new BadRequestException('Cannot reject finalized payout');
+      const payout = await tx.payoutRequest.findUnique({ where: { id: payoutId } });
+      if (!payout || payout.status !== PayoutStatus.PENDING) {
+        throw new BadRequestException('Payout is not pending');
       }
 
       const updated = await tx.payoutRequest.update({
-        where: { id },
+        where: { id: payoutId },
         data: {
-          status: 'REJECTED',
+          status: PayoutStatus.APPROVED,
           reviewedBy: adminId,
           reviewedAt: new Date(),
-          rejectionReason: reason,
         },
       });
 
-      // Unlock funds
-      await this.walletService.releaseFunds(
-        // Need workerId. Could fetch user -> wallet -> workerId?
-        // Wait, payout has walletId. Unlock by userId?
-        // WalletService expects userId (workerId).
-        // PayoutRequest has walletId. Wallet has userId.
-        // Need to fetch wallet relation
-        // Fix: fetch include wallet
-        (await tx.wallet.findUniqueOrThrow({ where: { id: payout.walletId } }))
-          .userId,
-        payout.amountCents,
-        payout.id,
-        tx,
-      );
-
+      await this.logAudit(tx, adminId, AuditAction.APPROVE, 'PayoutRequest', payoutId, 'Approved payout request');
       return updated;
     });
   }
 
-  async markPaid(id: string, adminId: string, receiptUrl?: string) {
+  /**
+   * Admin rejects payout (Release held funds)
+   */
+  async rejectPayout(payoutId: string, reason: string, adminId: string) {
     return this.prisma.$transaction(async (tx) => {
       const payout = await tx.payoutRequest.findUnique({
-        where: { id },
+        where: { id: payoutId },
         include: { wallet: true },
       });
-      if (!payout || payout.status === 'PAID')
-        throw new BadRequestException('Already paid or invalid');
 
+      if (!payout || (payout.status !== PayoutStatus.PENDING && payout.status !== PayoutStatus.APPROVED)) {
+        throw new BadRequestException('Cannot reject processed payout');
+      }
+
+      // Update Status
       const updated = await tx.payoutRequest.update({
-        where: { id },
+        where: { id: payoutId },
         data: {
-          status: 'PAID',
-          paidAt: new Date(),
-          transactionRef: receiptUrl || `TX-${Date.now()}`, // Use receipt URL as ref or store separately?
-          // If schema has receiptUrl, use it. If not, maybe transactionRef is used?
-          // Let's assume transactionRef is what we have for now.
+          status: PayoutStatus.REJECTED,
+          rejectionReason: reason,
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
         },
       });
 
-      await this.walletService.finalizePayout(
+      // Release Funds (Pending -> Available)
+      await this.walletService.release(
         payout.wallet.userId,
         payout.amountCents,
-        payout.id,
+        `Payout Rejected: ${reason}`,
+        'PAYOUT_REQUEST',
+        payoutId,
         tx,
       );
 
+      await this.logAudit(tx, adminId, AuditAction.REJECT, 'PayoutRequest', payoutId, `Rejected payout: ${reason}`);
       return updated;
     });
   }
 
-  async findAll(filter: { status?: PayoutStatus }) {
-    return this.prisma.payoutRequest.findMany({
-      where: filter,
-      include: { wallet: { include: { user: true } } },
-      orderBy: { createdAt: 'desc' },
+  /**
+   * Admin marks payout as PAID (Debit pending funds, upload receipt)
+   */
+  async markPaid(payoutId: string, adminId: string, receiptKey: string, mimeType = 'image/jpeg', sizeBytes = 0) {
+    return this.prisma.$transaction(async (tx) => {
+      const payout = await tx.payoutRequest.findUnique({
+        where: { id: payoutId },
+        include: { wallet: true },
+      });
+
+      // Must be approved first? Or generic flow allows immediate pay?
+      // Usually PENDING -> APPROVED -> PAID
+      if (!payout || payout.status === PayoutStatus.PAID) {
+        throw new BadRequestException('Payout already paid or invalid');
+      }
+
+      // Update Status
+      const updated = await tx.payoutRequest.update({
+        where: { id: payoutId },
+        data: {
+          status: PayoutStatus.PAID,
+          paidAt: new Date(),
+          processedAt: new Date(),
+        },
+      });
+
+      // Create Receipt
+      await tx.payoutReceipt.create({
+        data: {
+          payoutRequestId: payoutId,
+          receiptKey,
+          mimeType,
+          fileSizeBytes: sizeBytes,
+          uploadedBy: adminId,
+        },
+      });
+
+      // Debit Funds (Pending -> Gone)
+      await this.walletService.debit(
+        payout.wallet.userId,
+        payout.amountCents,
+        'Payout Processed',
+        'PAYOUT_REQUEST',
+        payoutId,
+        true, // fromPending
+        tx,
+      );
+
+      await this.logAudit(tx, adminId, AuditAction.UPDATE, 'PayoutRequest', payoutId, 'Marked payout as PAID');
+      return updated;
     });
+  }
+
+  async findAll(filter: { status?: PayoutStatus, userId?: string }, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+    const where: any = {};
+    if (filter.status) where.status = filter.status;
+
+    // If filtering by user
+    if (filter.userId) {
+      where.wallet = { userId: filter.userId };
+    }
+
+    const [payouts, total] = await Promise.all([
+      this.prisma.payoutRequest.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          wallet: { include: { user: { select: { id: true, fullName: true, email: true } } } },
+          receipt: true
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.payoutRequest.count({ where }),
+    ]);
+
+    return {
+      data: payouts,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async getPayoutsByUser(userId: string) {
     const wallet = await this.walletService.ensureWallet(userId);
     return this.prisma.payoutRequest.findMany({
       where: { walletId: wallet.id },
+      include: { receipt: true },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private async logAudit(tx: any, actorId: string, action: AuditAction, entityType: string, entityId: string, details: string) {
+    await tx.adminAuditLog.create({
+      data: {
+        actorId,
+        action,
+        entityType,
+        entityId,
+        actionDetail: details,
+      },
     });
   }
 }
