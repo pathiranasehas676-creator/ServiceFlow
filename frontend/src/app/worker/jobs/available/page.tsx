@@ -23,7 +23,7 @@ export default function AvailableJobsPage() {
         setLoading(true);
         try {
             // In real app, pass radius and lat/long
-            const response = await apiClient.get('/worker/jobs/available', {
+            const response = await apiClient.get('/jobs/available', {
                 params: { radius }
             });
             setJobs(Array.isArray(response.data) ? response.data : []);
@@ -46,7 +46,7 @@ export default function AvailableJobsPage() {
 
         setAcceptingId(id);
         try {
-            await apiClient.post(`/worker/jobs/${id}/accept`);
+            await apiClient.post(`/jobs/${id}/accept`);
             toast.success('Job accepted successfully!');
             // Refresh list to remove accepted job
             setJobs(prev => prev.filter(j => j.id !== id));

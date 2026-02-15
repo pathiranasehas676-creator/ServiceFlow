@@ -126,9 +126,9 @@ export class UsersService {
     return this.prisma.workerProfile.update({
       where: { userId },
       data: {
-        address: data.address,
-        district: data.district,
+        bio: data.bio,
         skills: data.skills,
+        hourlyRateCents: data.hourlyRateCents,
       },
     });
   }

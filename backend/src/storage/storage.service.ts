@@ -106,14 +106,14 @@ export class StorageService {
    * Generate presigned GET URL for file download/preview
    */
   async generatePresignedGetUrl(
-    objectKey: string,
+    fileId: string,
     userId: string,
     userRole: string,
   ) {
     // Fetch file metadata
     const fileObject = await this.prisma.fileObject.findUnique({
-      where: { objectKey },
-      include: { job: true, idVerification: true },
+      where: { id: fileId },
+      include: { job: true, verification: true },
     });
 
     if (!fileObject) {
@@ -128,10 +128,10 @@ export class StorageService {
       );
     }
 
-    // Generate presigned GET URL
+    // Generate presigned GET URL using the stored key
     const command = new GetObjectCommand({
       Bucket: this.bucketName,
-      Key: objectKey,
+      Key: fileObject.key,
     });
 
     const getUrl = await getSignedUrl(this.s3Client, command, {
@@ -160,14 +160,14 @@ export class StorageService {
   ) {
     return this.prisma.fileObject.create({
       data: {
-        bucket: this.bucketName,
-        objectKey,
         purpose,
+        key: objectKey,
+        url: `s3://${this.bucketName}/${objectKey}`,
         mimeType,
         sizeBytes,
-        uploadedByUserId: userId,
+        uploadedBy: userId,
         jobId,
-        idVerificationId,
+        verificationId: idVerificationId,
       },
     });
   }

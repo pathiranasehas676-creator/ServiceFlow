@@ -47,7 +47,7 @@ export class RiskService {
         // In production, check LoginAttempts table for distinct countries in short time
         const recentLogins = await this.prisma.loginAttempt.findMany({
             where: { email: user.email },
-            orderBy: { createdAt: 'desc' },
+            orderBy: { attemptedAt: 'desc' },
             take: 5,
         });
 

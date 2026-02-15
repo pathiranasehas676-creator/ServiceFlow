@@ -18,6 +18,7 @@ import { RiskModule } from './risk/risk.module';
 import { KycModule } from './kyc/kyc.module';
 import { AdminServicesModule } from './admin/services/services.module';
 import { AdminFinanceModule } from './admin/finance/finance.module';
+import { VerificationModule } from './verification/verification.module';
 
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
@@ -46,6 +47,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     SchedulerModule,
     RiskModule,
     KycModule,
+    VerificationModule,
   ],
 })
 export class AppModule { }

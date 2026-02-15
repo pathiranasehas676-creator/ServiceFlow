@@ -43,8 +43,9 @@ async function main() {
       passwordHash: password,
       fullName: 'Admin User',
       role: UserRole.ADMIN,
-      isTwoFactorEnabled: true,
+      isTwoFactorEnabled: false,
       isActive: true,
+      emailVerifiedAt: new Date(),
     },
   });
   console.log('✅ Created Admin user');
@@ -57,6 +58,7 @@ async function main() {
       fullName: 'Staff Member',
       role: UserRole.STAFF,
       isActive: true,
+      emailVerifiedAt: new Date(),
     },
   });
   console.log('✅ Created Staff user');
@@ -70,21 +72,13 @@ async function main() {
       fullName: 'John Worker',
       role: UserRole.WORKER,
       isActive: true,
+      emailVerifiedAt: new Date(),
       workerProfile: {
         create: {
-          isOnline: true,
-          isAvailable: true,
-          latitude: 40.7128,
-          longitude: -74.0060,
-          address: '123 Main St, New York, NY 10001',
-          district: 'Manhattan',
+          bio: 'Experienced plumber and electrician',
           skills: ['Plumbing', 'Electrical'],
+          hourlyRateCents: 5000,
           verificationStatus: VerificationStatus.APPROVED,
-          verifiedAt: new Date(),
-          rating: 4.8,
-          totalJobs: 45,
-          completedJobs: 42,
-          profileCompleted: true,
         },
       },
       wallet: {
@@ -109,20 +103,13 @@ async function main() {
       fullName: 'Jane Smith',
       role: UserRole.WORKER,
       isActive: true,
+      emailVerifiedAt: new Date(),
       workerProfile: {
         create: {
-          isOnline: false,
-          isAvailable: false,
-          latitude: 40.7580,
-          longitude: -73.9855,
-          address: '456 Park Ave, New York, NY 10022',
-          district: 'Manhattan',
+          bio: 'Professional cleaner and gardener',
           skills: ['Cleaning', 'Gardening'],
+          hourlyRateCents: 4000,
           verificationStatus: VerificationStatus.PENDING,
-          rating: 4.5,
-          totalJobs: 28,
-          completedJobs: 26,
-          profileCompleted: true,
         },
       },
       wallet: {
@@ -147,21 +134,13 @@ async function main() {
       fullName: 'Bob Builder',
       role: UserRole.WORKER,
       isActive: true,
+      emailVerifiedAt: new Date(),
       workerProfile: {
         create: {
-          isOnline: true,
-          isAvailable: true,
-          latitude: 40.6782,
-          longitude: -73.9442,
-          address: '789 Brooklyn Ave, Brooklyn, NY 11201',
-          district: 'Brooklyn',
+          bio: 'Skilled construction worker and carpenter',
           skills: ['Construction', 'Painting', 'Carpentry'],
+          hourlyRateCents: 6000,
           verificationStatus: VerificationStatus.APPROVED,
-          verifiedAt: new Date(),
-          rating: 4.9,
-          totalJobs: 67,
-          completedJobs: 65,
-          profileCompleted: true,
         },
       },
       wallet: {

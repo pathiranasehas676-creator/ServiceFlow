@@ -36,9 +36,9 @@ export class JobsService {
 
     const workerProfile = worker?.workerProfile;
 
-    if (!worker || !workerProfile || !workerProfile.profileCompleted) {
+    if (!worker || !workerProfile) {
       throw new BadRequestException(
-        'Complete your profile before accepting jobs',
+        'Worker profile not found',
       );
     }
 
@@ -206,16 +206,8 @@ export class JobsService {
         },
       });
 
-      // Update worker average rating
-      const ratings = await tx.rating.findMany({
-        where: { workerId: job.worker!.id },
-      });
-      const avg = ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length;
-
-      await tx.workerProfile.update({
-        where: { id: job.worker!.id },
-        data: { rating: avg, totalJobs: { increment: 1 } },
-      });
+      // Note: Worker rating/totalJobs are now tracked in WorkerPerformance table
+      // No need to update WorkerProfile here
 
       return rating;
     });

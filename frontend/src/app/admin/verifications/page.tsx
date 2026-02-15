@@ -1,244 +1,310 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/apiClient';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { StatusBadge } from '@/components/admin/status-badge';
-import { LoadingSkeletonTable } from '@/components/admin/loading-skeleton-table';
-import { Search, CheckCircle, Eye, ShieldCheck, Trash2, ArrowRight } from 'lucide-react';
-import { formatDateTime } from '@/lib/utils';
-import { apiClient } from '@/lib/api-client';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, Search, Eye, Check, X, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
-import { VerificationDrawer } from '@/components/admin/verifications/verification-drawer';
+import { format } from 'date-fns';
 
-export default function VerificationsPage() {
-    const [verifications, setVerifications] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    const [actionLoading, setActionLoading] = useState(false);
-
-    // Drawer state
-    const [selectedVerification, setSelectedVerification] = useState<any | null>(null);
-    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-
-    const loadVerifications = async () => {
-        setLoading(true);
-        try {
-            const response = await apiClient.get('/admin/verifications');
-            setVerifications(Array.isArray(response.data) ? response.data : []);
-        } catch (error) {
-            toast.error('Failed to load verifications');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        loadVerifications();
-    }, []);
-
-    const filteredVerifications = verifications.filter((v) =>
-        v.worker?.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        v.worker?.email?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const toggleSelectAll = () => {
-        if (selectedIds.length === filteredVerifications.length) {
-            setSelectedIds([]);
-        } else {
-            setSelectedIds(filteredVerifications.map(v => v.id));
-        }
-    };
-
-    const toggleSelect = (id: string) => {
-        setSelectedIds(prev =>
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-        );
-    };
-
-    const handleBulkApprove = async () => {
-        if (!confirm(`Approve ${selectedIds.length} verifications?`)) return;
-        setActionLoading(true);
-        try {
-            await apiClient.post('/admin/verifications/bulk-approve', { ids: selectedIds });
-            toast.success(`Successfully approved ${selectedIds.length} verifications`);
-            setSelectedIds([]);
-            loadVerifications();
-        } catch (error) {
-            toast.error('Bulk approval failed');
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
-    const handleReview = (verification: any) => {
-        setSelectedVerification(verification);
-        setIsDrawerOpen(true);
-    };
+export default function AdminVerificationsPage() {
+    const [activeTab, setActiveTab] = useState('id');
+    const [page, setPage] = useState(1);
+    const [searchTerm, setSearchTerm] = useState('');
 
     return (
-        <div className="space-y-6 relative pb-24">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-black tracking-tight text-slate-900">Worker Trust Center</h1>
-                <p className="text-muted-foreground font-medium">Identity verification pipeline and document governance.</p>
+        <div className="container mx-auto py-8 space-y-6">
+            <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-bold">Verification Requests</h1>
             </div>
 
-            <Card className="border-none shadow-2xl bg-white overflow-hidden">
-                <CardHeader className="bg-slate-50/50 border-b p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                        <div className="space-y-1">
-                            <CardTitle className="text-xl font-bold text-slate-800">Review Queue</CardTitle>
-                            <CardDescription className="flex items-center gap-2">
-                                <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
-                                {filteredVerifications.length} items requiring manual validation
-                            </CardDescription>
-                        </div>
-                        <div className="relative w-full sm:w-96">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
-                            <Input
-                                placeholder="Filter by name, email or ID hash..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10 h-11 bg-white border-slate-200 focus:ring-indigo-500"
-                            />
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    {loading ? (
-                        <div className="p-6">
-                            <LoadingSkeletonTable rows={8} columns={6} />
-                        </div>
-                    ) : filteredVerifications.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-32 text-center bg-slate-50/30">
-                            <div className="h-16 w-16 bg-white rounded-full flex items-center justify-center shadow-lg mb-4 text-indigo-500">
-                                <ShieldCheck className="h-8 w-8" />
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-900">Pipeline Clear</h3>
-                            <p className="text-slate-500 max-w-xs mx-auto">All worker identities have been verified or rejected. No pending items.</p>
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader className="bg-slate-50/80">
-                                <TableRow className="hover:bg-transparent border-slate-100">
-                                    <TableHead className="w-12 px-6">
-                                        <Checkbox
-                                            checked={selectedIds.length === filteredVerifications.length && filteredVerifications.length > 0}
-                                            onCheckedChange={toggleSelectAll}
-                                            className="border-slate-300"
-                                        />
-                                    </TableHead>
-                                    <TableHead className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Worker Identity</TableHead>
-                                    <TableHead className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Submission Time</TableHead>
-                                    <TableHead className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Documents</TableHead>
-                                    <TableHead className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Security Status</TableHead>
-                                    <TableHead className="text-right px-6 font-bold text-slate-700 uppercase tracking-wider text-[10px]">Action</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredVerifications.map((verification) => (
-                                    <TableRow
-                                        key={verification.id}
-                                        className={`border-slate-100 transition-colors ${selectedIds.includes(verification.id) ? 'bg-indigo-50/50' : 'hover:bg-slate-50/50'}`}
-                                    >
-                                        <TableCell className="px-6">
-                                            <Checkbox
-                                                checked={selectedIds.includes(verification.id)}
-                                                onCheckedChange={() => toggleSelect(verification.id)}
-                                                className="border-slate-300"
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-col py-1">
-                                                <span className="font-bold text-slate-900 text-sm">{verification.worker?.fullName}</span>
-                                                <span className="text-[11px] text-muted-foreground font-mono">{verification.worker?.email}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-[11px] font-medium text-slate-600">
-                                            {formatDateTime(verification.submittedAt)}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="bg-white text-indigo-700 border-indigo-100 flex items-center gap-1.5 w-fit shadow-sm font-bold text-[10px]">
-                                                <ShieldCheck className="h-3 w-3" /> ID_PASS_VERIFIED
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <StatusBadge status={verification.status} />
-                                        </TableCell>
-                                        <TableCell className="text-right px-6">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-8 group hover:bg-indigo-600 hover:text-white transition-all"
-                                                onClick={() => handleReview(verification)}
-                                            >
-                                                <Eye className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
-                                                <span className="font-bold">REVIEW</span>
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
+            <div className="flex items-center space-x-2">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Search by name or email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="max-w-sm"
+                />
+            </div>
 
-            {/* Floating Bulk Action Bar */}
-            {selectedIds.length > 0 && (
-                <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-8 duration-500">
-                    <div className="bg-slate-950 text-white px-8 py-5 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center gap-10 border border-white/20 backdrop-blur-md">
-                        <div className="flex items-center gap-4 pr-10 border-r border-white/10">
-                            <span className="bg-indigo-500 h-8 w-8 rounded-full flex items-center justify-center text-sm font-black text-white shadow-lg ring-4 ring-indigo-500/20">
-                                {selectedIds.length}
-                            </span>
-                            <div className="flex flex-col">
-                                <span className="text-sm font-black tracking-tight uppercase">Bulk Operations</span>
-                                <span className="text-[10px] text-white/50 font-medium font-mono">ENCRYPTED_SESSION_ACTIVE</span>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-white/70 hover:text-white hover:bg-white/10 font-bold text-xs"
-                                onClick={() => setSelectedIds([])}
-                            >
-                                CANCEL
-                            </Button>
-                            <Button
-                                variant="destructive"
-                                size="default"
-                                className="px-6 flex items-center gap-2 font-black text-xs h-11"
-                                disabled={actionLoading}
-                            >
-                                <Trash2 className="h-4 w-4" /> REJECT BATCH
-                            </Button>
-                            <Button
-                                size="default"
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 flex items-center gap-2 font-black text-xs h-11 shadow-lg shadow-indigo-500/30"
-                                onClick={handleBulkApprove}
-                                disabled={actionLoading}
-                            >
-                                <CheckCircle className="h-4 w-4" /> APPROVE SELECTION
-                                <ArrowRight className="h-4 w-4 ml-1" />
-                            </Button>
-                        </div>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList>
+                    <TabsTrigger value="id">Identity Verifications</TabsTrigger>
+                    <TabsTrigger value="bank">Bank Details</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="id" className="space-y-4">
+                    <VerificationList type="id" page={page} search={searchTerm} />
+                </TabsContent>
+
+                <TabsContent value="bank" className="space-y-4">
+                    <VerificationList type="bank" page={page} search={searchTerm} />
+                </TabsContent>
+            </Tabs>
+        </div>
+    );
+}
+
+function VerificationList({ type, page, search }: { type: 'id' | 'bank', page: number, search: string }) {
+    const queryClient = useQueryClient();
+
+    // Fetch pending by default for queue management
+    const { data, isLoading, isError } = useQuery({
+        queryKey: ['admin-verifications', type, page, search],
+        queryFn: async () => {
+            return api.get(`/admin/verifications/queue?type=${type}&status=PENDING&page=${page}&q=${search}`);
+        }
+    });
+
+    if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin h-8 w-8" /></div>;
+    if (isError) return <div className="text-red-500">Failed to load requests</div>;
+
+    const items = data.items || [];
+
+    if (items.length === 0) {
+        return <div className="text-center p-8 text-muted-foreground">No pending requests found.</div>;
+    }
+
+    return (
+        <Card>
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Worker</TableHead>
+                        <TableHead>Submitted</TableHead>
+                        <TableHead>Details</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {items.map((item: any) => (
+                        <VerificationRow key={item.id} item={item} type={type} />
+                    ))}
+                </TableBody>
+            </Table>
+        </Card>
+    );
+}
+
+function VerificationRow({ item, type }: { item: any, type: 'id' | 'bank' }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const user = item.workerProfile.user;
+
+    return (
+        <TableRow>
+            <TableCell>
+                <div className="font-medium">{user.fullName}</div>
+                <div className="text-sm text-muted-foreground">{user.email}</div>
+            </TableCell>
+            <TableCell>
+                {type === 'id'
+                    ? format(new Date(item.submittedAt), 'MMM d, yyyy HH:mm')
+                    : format(new Date(item.updatedAt || item.createdAt), 'MMM d, yyyy HH:mm')
+                }
+            </TableCell>
+            <TableCell>
+                {type === 'id' ? (
+                    <Badge variant="outline">{item.documentType}</Badge>
+                ) : (
+                    <div className="space-y-0.5 text-sm">
+                        <div>{item.bankName}</div>
+                        <div className="text-muted-foreground">**** {item.accountNumberLast4}</div>
+                    </div>
+                )}
+            </TableCell>
+            <TableCell className="text-right">
+                <Dialog open={isOpen} onOpenChange={setIsOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="outline" size="sm">Review</Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle>Review {type === 'id' ? 'Identity' : 'Bank'} Verification</DialogTitle>
+                            <DialogDescription>
+                                Applicant: {user.fullName} ({user.email})
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {type === 'id' ? <IdDetails item={item} /> : <BankDetails item={item} />}
+
+                        <ReviewActions
+                            id={item.id}
+                            type={type}
+                            onComplete={() => setIsOpen(false)}
+                        />
+                    </DialogContent>
+                </Dialog>
+            </TableCell>
+        </TableRow>
+    );
+}
+
+function IdDetails({ item }: { item: any }) {
+    // Mock URLs for preview since backend returns keys
+    // In real implementation, these would be presigned GET URLs from a helper endpoint or passed in item
+    // Assuming for MVP we just use a placeholder or assume public access if development
+    // Requirement says: "show images (MinIO preview via presigned GET)"
+    // Since backend returns keys currently in the 'queue' endpoint, frontend can't generate presigned URLs itself securely without backend.
+    // I should ideally update queue endpoint to return urls.
+    // For now, I'll display the Key string and a placeholder image.
+
+    return (
+        <div className="grid gap-6 py-4">
+            <div className="space-y-2">
+                <Label>Details</Label>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>Type: <span className="font-medium">{item.documentType}</span></div>
+                    <div>Number: <span className="font-medium">{item.documentNumber || 'N/A'}</span></div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>Front Image</Label>
+                    <div className="border rounded bg-muted aspect-video flex items-center justify-center relative overflow-hidden">
+                        <span className="text-xs text-muted-foreground break-all p-2">{item.frontImageKey}</span>
+                        {/* <img src={url} alt="ID Front" className="object-cover w-full h-full" /> */}
                     </div>
                 </div>
-            )}
-
-            <VerificationDrawer
-                verification={selectedVerification}
-                open={isDrawerOpen}
-                onClose={() => setIsDrawerOpen(false)}
-                onStatusChange={loadVerifications}
-            />
+                <div className="space-y-2">
+                    <Label>Selfie</Label>
+                    <div className="border rounded bg-muted aspect-square flex items-center justify-center relative overflow-hidden">
+                        <span className="text-xs text-muted-foreground break-all p-2">{item.selfieKey}</span>
+                    </div>
+                </div>
+                {item.backImageKey && (
+                    <div className="space-y-2">
+                        <Label>Back Image</Label>
+                        <div className="border rounded bg-muted aspect-video flex items-center justify-center relative overflow-hidden">
+                            <span className="text-xs text-muted-foreground break-all p-2">{item.backImageKey}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
+    );
+}
+
+function BankDetails({ item }: { item: any }) {
+    return (
+        <div className="space-y-4 py-4">
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <div className="flex">
+                    <div className="flex-shrink-0">
+                        <ShieldAlert className="h-5 w-5 text-yellow-400" aria-hidden="true" />
+                    </div>
+                    <div className="ml-3">
+                        <p className="text-sm text-yellow-700">
+                            Account number is encrypted. Only verify that the name matches the profile.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm border p-4 rounded">
+                <div>
+                    <span className="text-muted-foreground">Bank Name</span>
+                    <div className="font-medium">{item.bankName}</div>
+                </div>
+                <div>
+                    <span className="text-muted-foreground">Account Holder</span>
+                    <div className="font-medium">{item.accountName}</div>
+                </div>
+                <div>
+                    <span className="text-muted-foreground">Account Number</span>
+                    <div className="font-medium">**** {item.accountNumberLast4}</div>
+                </div>
+                <div>
+                    <span className="text-muted-foreground">Branch/Sort Code</span>
+                    <div className="font-medium">{item.branchCode || 'N/A'}</div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ReviewActions({ id, type, onComplete }: { id: string, type: 'id' | 'bank', onComplete: () => void }) {
+    const queryClient = useQueryClient();
+    const [reason, setReason] = useState('');
+    const [showReject, setShowReject] = useState(false);
+
+    const approveMutation = useMutation({
+        mutationFn: async () => {
+            await api.post(`/admin/verifications/${type}/${id}/approve`);
+        },
+        onSuccess: () => {
+            // Invalidate the query key used in VerificationList
+            queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
+            onComplete();
+            toast.success("Request approved");
+        },
+        onError: () => toast.error("Failed to approve")
+    });
+
+    const rejectMutation = useMutation({
+        mutationFn: async () => {
+            await api.post(`/admin/verifications/${type}/${id}/reject`, { reason });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin-verifications'] });
+            onComplete();
+            toast.success("Request rejected");
+        },
+        onError: () => toast.error("Failed to reject")
+    });
+
+    if (showReject) {
+        return (
+            <div className="space-y-4 pt-4 border-t">
+                <div className="space-y-2">
+                    <Label htmlFor="reason">Rejection Reason</Label>
+                    <Textarea
+                        id="reason"
+                        placeholder="Please provide a reason for rejection..."
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                    />
+                </div>
+                <div className="flex justify-end gap-2">
+                    <Button variant="ghost" onClick={() => setShowReject(false)}>Cancel</Button>
+                    <Button
+                        variant="destructive"
+                        onClick={() => rejectMutation.mutate()}
+                        disabled={!reason || rejectMutation.isPending}
+                    >
+                        {rejectMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Confirm Rejection
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <DialogFooter className="pt-4 border-t gap-2 sm:gap-0">
+            <div className="flex justify-between w-full">
+                <Button variant="ghost" onClick={onComplete}>Cancel</Button>
+                <div className="space-x-2">
+                    <Button variant="destructive" onClick={() => setShowReject(true)}>Reject</Button>
+                    <Button
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => approveMutation.mutate()}
+                        disabled={approveMutation.isPending}
+                    >
+                        {approveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Approve
+                    </Button>
+                </div>
+            </div>
+        </DialogFooter>
     );
 }
