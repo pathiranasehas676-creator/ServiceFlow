@@ -279,6 +279,7 @@ model BankDetails {
   // Encrypted account number (AES-256-GCM)
   encryptedAccountNumber String    @db.Text
   accountNumberIV        String    @db.VarChar(255)
+  accountNumberAuthTag   String?   @db.VarChar(255) // Mandator for GCM
   accountNumberLast4     String    @db.VarChar(4)
   encryptionVersion      Int       @default(1)
   
@@ -619,6 +620,7 @@ model PayoutRequest {
   
   // Processing
   transactionRef  String?       @db.VarChar(255)
+  paymentReference String?      @db.VarChar(255)
   processedAt     DateTime?
   paidAt          DateTime?
   
@@ -627,6 +629,7 @@ model PayoutRequest {
   
   // Relations
   receipt         PayoutReceipt?
+  statusHistory   PayoutStatusHistory[]
   
   @@index([walletId, status])
   @@index([status, createdAt])
@@ -651,6 +654,23 @@ model PayoutReceipt {
   
   @@index([payoutRequestId])
   @@map("payout_receipts")
+}
+
+model PayoutStatusHistory {
+  id              String        @id @default(uuid()) @db.Uuid
+  payoutRequestId String        @db.Uuid
+  payoutRequest   PayoutRequest @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
+  
+  fromStatus      PayoutStatus?
+  toStatus        PayoutStatus
+  
+  actorId         String        @db.Uuid
+  reason          String?       @db.Text
+  
+  createdAt       DateTime      @default(now())
+  
+  @@index([payoutRequestId])
+  @@map("payout_status_history")
 }
 
 // ============================================

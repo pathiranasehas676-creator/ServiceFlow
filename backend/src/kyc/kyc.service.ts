@@ -1,18 +1,18 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RiskService } from '../risk/risk.service';
-import { createCipheriv, createDecipheriv, randomBytes, createHmac } from 'crypto';
+import { createHmac } from 'crypto';
 import { VerificationStatus, FilePurpose } from '@prisma/client';
+import { EncryptionService } from '../common/services/encryption.service';
 
 @Injectable()
 export class KycService {
-    private readonly ALGORITHM = 'aes-256-gcm';
-    private readonly ENCRYPTION_KEY = Buffer.from(process.env.BANK_ENCRYPTION_KEY || 'default-32-byte-key-0000000000000', 'utf-8').slice(0, 32);
     private readonly HASH_SECRET = process.env.BANK_HASH_SECRET || 'bank-hash-secret';
 
     constructor(
         private prisma: PrismaService,
-        private riskService: RiskService
+        private riskService: RiskService,
+        private encryptionService: EncryptionService
     ) { }
 
     // ------------------------------------------------------------------
@@ -23,8 +23,6 @@ export class KycService {
         const worker = await this.prisma.workerProfile.findUnique({ where: { userId } });
         if (!worker) throw new NotFoundException('Worker profile not found');
 
-        // Create or Update IdVerification
-        // Usually assume one pending verification at a time
         const verification = await this.prisma.idVerification.create({
             data: {
                 workerProfileId: worker.id,
@@ -38,13 +36,11 @@ export class KycService {
             }
         });
 
-        // Update Worker Status
         await this.prisma.workerProfile.update({
             where: { id: worker.id },
             data: { verificationStatus: 'PENDING' }
         });
 
-        // Log History
         await this.logHistory({
             userId,
             action: 'SUBMITTED',
@@ -68,7 +64,6 @@ export class KycService {
         const userId = verification.workerProfile.userId;
 
         await this.prisma.$transaction(async (tx) => {
-            // Update Verification
             await tx.idVerification.update({
                 where: { id: verificationId },
                 data: {
@@ -80,7 +75,6 @@ export class KycService {
                 }
             });
 
-            // Update Worker Profile
             await tx.workerProfile.update({
                 where: { id: verification.workerProfileId },
                 data: {
@@ -88,7 +82,6 @@ export class KycService {
                 }
             });
 
-            // If Approved, Upgrade User Verification Level
             if (approved) {
                 await tx.user.update({
                     where: { id: userId },
@@ -96,7 +89,6 @@ export class KycService {
                 });
             }
 
-            // Log History
             await tx.verificationHistory.create({
                 data: {
                     userId,
@@ -109,22 +101,20 @@ export class KycService {
                 }
             });
 
-            // Audit Log
             await tx.adminAuditLog.create({
                 data: {
                     actorId: adminId,
-                    actorEmail: 'admin@system', // Ideally fetch admin email
+                    actorEmail: 'admin@system',
                     action: approved ? 'VERIFICATION_APPROVED' : 'VERIFICATION_REJECTED',
                     actionDetail: `Identity verification ${status} for user ${userId}`,
                     entityType: 'User',
                     entityId: userId,
-                    ipAddress: 'System', // Placeholder
+                    ipAddress: 'System',
                     userAgent: 'System'
                 }
             });
         });
 
-        // Update Risk Score Async
         await this.riskService.detectRisk(userId);
 
         return { status };
@@ -138,31 +128,27 @@ export class KycService {
         const worker = await this.prisma.workerProfile.findUnique({ where: { userId } });
         if (!worker) throw new NotFoundException('Worker profile not found');
 
-        // Check for duplicates
         const accountHash = this.hashAccountNumber(data.accountNumber);
         const existing = await this.prisma.bankDetails.findUnique({
             where: { accountNumberHash: accountHash }
         });
 
         if (existing && existing.workerProfileId !== worker.id) {
-            // DUPLICATE DETECTED
-            // Auto-flag risk but maybe block submission or allow and flag?
-            // Requirement: "Prevent same account number used by >1 worker" -> Block.
             throw new BadRequestException('This bank account is already associated with another user.');
         }
 
-        // Encrypt
-        const { encrypted, iv } = this.encryptAccountNumber(data.accountNumber);
+        // Encrypt using centralized service
+        const encrypted = this.encryptionService.encrypt(data.accountNumber);
 
-        // Save
         const bankDetails = await this.prisma.bankDetails.upsert({
             where: { workerProfileId: worker.id },
             create: {
                 workerProfileId: worker.id,
                 bankName: data.bankName,
                 accountName: data.accountName,
-                encryptedAccountNumber: encrypted,
-                accountNumberIV: iv,
+                encryptedAccountNumber: encrypted.content,
+                accountNumberIV: encrypted.iv,
+                accountNumberAuthTag: encrypted.tag,
                 accountNumberLast4: data.accountNumber.slice(-4),
                 accountNumberHash: accountHash,
                 branchCode: data.branchCode,
@@ -172,18 +158,18 @@ export class KycService {
             update: {
                 bankName: data.bankName,
                 accountName: data.accountName,
-                encryptedAccountNumber: encrypted,
-                accountNumberIV: iv,
+                encryptedAccountNumber: encrypted.content,
+                accountNumberIV: encrypted.iv,
+                accountNumberAuthTag: encrypted.tag,
                 accountNumberLast4: data.accountNumber.slice(-4),
                 accountNumberHash: accountHash,
                 branchCode: data.branchCode,
                 swiftCode: data.swiftCode,
                 isVerified: false,
-                bankVerifiedAt: null // Reset verification on change
+                bankVerifiedAt: null
             }
         });
 
-        // Log History
         await this.logHistory({
             userId,
             action: 'SUBMITTED',
@@ -192,8 +178,6 @@ export class KycService {
             reason: 'Bank details submitted/updated'
         });
 
-        // Recalculate Risk (Shared account check logic handles duplicates if they slipped, but logic above blocks).
-        // But login patterns might trigger risk.
         await this.riskService.updateUserRiskProfile(userId);
 
         return bankDetails;
@@ -216,10 +200,9 @@ export class KycService {
                 }
             });
 
-            // Upgrade User Level
             await tx.user.update({
                 where: { id: userId },
-                data: { verificationLevel: { set: 3 } } // Level 3 = Bank
+                data: { verificationLevel: { set: 3 } }
             });
 
             await tx.verificationHistory.create({
@@ -238,7 +221,7 @@ export class KycService {
                 data: {
                     actorId: adminId,
                     actorEmail: 'admin@system',
-                    action: 'VERIFICATION_APPROVED', // Or generic approve
+                    action: 'VERIFICATION_APPROVED',
                     actionDetail: `Bank verification approved for user ${userId}`,
                     entityType: 'User',
                     entityId: userId,
@@ -254,17 +237,6 @@ export class KycService {
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
-
-    private encryptAccountNumber(accountNumber: string) {
-        const iv = randomBytes(16);
-        const cipher = createCipheriv(this.ALGORITHM, this.ENCRYPTION_KEY, iv);
-        let encrypted = cipher.update(accountNumber, 'utf8', 'base64');
-        encrypted += cipher.final('base64');
-        return {
-            encrypted,
-            iv: iv.toString('base64')
-        };
-    }
 
     private hashAccountNumber(accountNumber: string) {
         return createHmac('sha256', this.HASH_SECRET)
