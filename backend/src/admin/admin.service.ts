@@ -238,4 +238,37 @@ export class AdminService implements OnModuleInit {
       return user;
     });
   }
+
+  async getApiMetrics() {
+    // Last 24 hours
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const totalRequests = await (this.prisma as any).apiRequestLog.count({
+      where: { createdAt: { gte: since } },
+    });
+
+    const errorCount = await (this.prisma as any).apiRequestLog.count({
+      where: {
+        createdAt: { gte: since },
+        statusCode: { gte: 400 },
+      },
+    });
+
+    const topEndpoints = await (this.prisma as any).apiRequestLog.groupBy({
+      by: ['method', 'path'],
+      where: { createdAt: { gte: since } },
+      _count: { path: true },
+      _avg: { durationMs: true },
+      orderBy: { _count: { path: 'desc' } },
+      take: 10,
+    });
+
+    return {
+      period: '24h',
+      totalRequests,
+      errorCount,
+      errorRate: totalRequests > 0 ? errorCount / totalRequests : 0,
+      topEndpoints,
+    };
+  }
 }

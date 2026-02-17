@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Briefcase, UserCheck, FileCheck, Wallet, DollarSign, Building } from 'lucide-react';
 import Link from 'next/link';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 interface DashboardStats {
@@ -28,8 +28,8 @@ export default function AdminDashboard() {
         async function loadData() {
             setLoading(true);
             try {
-                const response = await apiClient.get('/admin/stats');
-                setStats(response.data);
+                const data = await api.get('/admin/stats');
+                setStats(data);
             } catch (error) {
                 toast.error('Failed to load dashboard stats');
             } finally {

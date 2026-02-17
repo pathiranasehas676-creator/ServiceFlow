@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { WorkerProfile } from '@/lib/types/worker';
 import { toast } from 'sonner';
 
@@ -9,15 +9,13 @@ export function useWorkerProfile() {
     const profileQuery = useQuery<WorkerProfile>({
         queryKey: ['worker', 'profile'],
         queryFn: async () => {
-            const response = await apiClient.get('/auth/me');
-            return response.data;
+            return await api.get('/auth/me');
         },
     });
 
     const updateProfileMutation = useMutation({
         mutationFn: async (data: Partial<WorkerProfile>) => {
-            const response = await apiClient.put('/worker/profile', data);
-            return response.data;
+            return await api.put('/worker/profile', data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['worker', 'profile'] });
@@ -30,8 +28,7 @@ export function useWorkerProfile() {
 
     const updateBankMutation = useMutation({
         mutationFn: async (data: WorkerProfile['bankDetails']) => {
-            const response = await apiClient.put('/worker/bank', data);
-            return response.data;
+            return await api.put('/worker/bank', data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['worker', 'profile'] });
@@ -45,8 +42,7 @@ export function useWorkerProfile() {
     const idStatusQuery = useQuery({
         queryKey: ['worker', 'id-status'],
         queryFn: async () => {
-            const response = await apiClient.get('/worker/id-status');
-            return response.data;
+            return await api.get('/worker/id-status');
         },
     });
 

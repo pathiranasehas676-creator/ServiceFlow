@@ -11,7 +11,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 export function WalletList() {
     const [wallets, setWallets] = React.useState<any[]>([]);
@@ -21,8 +21,8 @@ export function WalletList() {
     const fetchWallets = async () => {
         setLoading(true);
         try {
-            const res = await apiClient.get('/admin/finance/wallets');
-            setWallets(res.data.data);
+            const res = await api.get('/admin/finance/wallets');
+            setWallets(res.data || []); // Assuming api.get returns body, so res is body. If body has data prop, use it.
         } catch (error) {
             toast.error('Failed to load wallets');
         } finally {
@@ -41,7 +41,7 @@ export function WalletList() {
         if (!reason) return;
 
         try {
-            await apiClient.post(`/admin/finance/wallets/${id}/adjust`, {
+            await api.post(`/admin/finance/wallets/${id}/adjust`, {
                 amountCents: Number(amount),
                 reason,
             });

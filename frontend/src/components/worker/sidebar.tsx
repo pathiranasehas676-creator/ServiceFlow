@@ -11,14 +11,13 @@ import {
     Receipt,
     User,
     LifeBuoy,
-    Bell,
     ChevronRight,
     LogOut
 } from 'lucide-react';
 import { useWorkerProfile } from '@/lib/hooks/worker/use-worker-profile';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -51,7 +50,7 @@ export function WorkerSidebar() {
 
     const toggleOnline = useMutation({
         mutationFn: async (isOnline: boolean) => {
-            await apiClient.put('/worker/availability', { isOnline });
+            await api.put('/worker/availability', { isOnline });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['worker', 'profile'] });
@@ -137,7 +136,7 @@ export function WorkerSidebar() {
                 </div>
                 <button
                     onClick={() => {
-                        apiClient.post('/auth/logout').then(() => window.location.href = '/auth/login');
+                        api.post('/auth/logout').then(() => window.location.href = '/auth/login');
                     }}
                     className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
                 >

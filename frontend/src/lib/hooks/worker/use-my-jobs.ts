@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { Job } from '@/lib/types/worker';
 import { toast } from 'sonner';
 import { useWorkerProfile } from './use-worker-profile';
@@ -11,8 +11,7 @@ export function useMyJobs(status?: string) {
     const myJobsQuery = useQuery<Job[]>({
         queryKey: ['jobs', 'my', status],
         queryFn: async () => {
-            const response = await apiClient.get('/jobs/my', { params: { status } });
-            return response.data;
+            return await api.get('/jobs/my', { params: { status } });
         },
     });
 
@@ -30,16 +29,14 @@ export function useJobDetail(jobId: string) {
     const jobQuery = useQuery<Job>({
         queryKey: ['jobs', 'detail', jobId],
         queryFn: async () => {
-            const response = await apiClient.get(`/jobs/${jobId}`);
-            return response.data;
+            return await api.get(`/jobs/${jobId}`);
         },
         enabled: !!jobId,
     });
 
     const arrivedMutation = useMutation({
         mutationFn: async (coords: { lat: number; lng: number }) => {
-            const response = await apiClient.post(`/jobs/${jobId}/arrived`, coords);
-            return response.data;
+            return await api.post(`/jobs/${jobId}/arrived`, coords);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['jobs', 'detail', jobId] });
@@ -64,8 +61,7 @@ export function useJobDetail(jobId: string) {
                 });
                 return { offline: true };
             }
-            const response = await apiClient.post(`/jobs/${jobId}/proof/submit`, { proofUrls });
-            return response.data;
+            return await api.post(`/jobs/${jobId}/proof/submit`, { proofUrls });
         },
         onSuccess: (data: any) => {
             queryClient.invalidateQueries({ queryKey: ['jobs', 'detail', jobId] });

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Upload, X, CheckCircle, FileImage, Loader2 } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 interface UploadQueueProps {
@@ -50,35 +50,63 @@ export function UploadQueue({ jobId, onUploadComplete, maxFiles = 3 }: UploadQue
                     continue;
                 }
 
-                // 1. Get Presigned URL
-                const fileName = `${jobId}_${Date.now()}_${files[i].file.name}`;
-                const presignRes = await apiClient.post(`/jobs/${jobId}/proof/presign`, {
-                    fileName,
-                    contentType: files[i].file.type
-                });
+                try {
+                    // Update progress to show something is happening
+                    setFiles(prev => {
+                        const updated = [...prev];
+                        updated[i].progress = 10;
+                        return updated;
+                    });
 
-                const { uploadUrl, fileKey } = presignRes.data;
+                    // 1. Get Presigned URL
+                    const fileName = `${jobId}_${Date.now()}_${files[i].file.name}`;
+                    const presignRes = await api.post(`/jobs/${jobId}/proof/presign`, {
+                        fileName,
+                        contentType: files[i].file.type
+                    });
 
-                // 2. Upload to storage (e.g. MinIO/S3)
-                await apiClient.put(uploadUrl, files[i].file, {
-                    headers: { 'Content-Type': files[i].file.type },
-                    onUploadProgress: (progressEvent) => {
-                        const progress = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
-                        setFiles(prev => {
-                            const updated = [...prev];
-                            updated[i].progress = progress;
-                            return updated;
-                        });
+                    // Assuming presignRes is { uploadUrl, fileKey }
+                    const { uploadUrl, fileKey } = presignRes;
+
+                    setFiles(prev => {
+                        const updated = [...prev];
+                        updated[i].progress = 30;
+                        return updated;
+                    });
+
+                    // 2. Upload to storage (e.g. MinIO/S3) using native fetch
+                    const uploadRes = await fetch(uploadUrl, {
+                        method: 'PUT',
+                        body: files[i].file,
+                        headers: {
+                            'Content-Type': files[i].file.type
+                        }
+                    });
+
+                    if (!uploadRes.ok) {
+                        throw new Error(`Upload failed: ${uploadRes.statusText}`);
                     }
-                });
 
-                const finalUrl = fileKey; // Backend expects the key
-                uploadedUrls.push(finalUrl);
-                setFiles(prev => {
-                    const updated = [...prev];
-                    updated[i].url = finalUrl;
-                    return updated;
-                });
+                    // Success
+                    setFiles(prev => {
+                        const updated = [...prev];
+                        updated[i].progress = 100;
+                        updated[i].url = fileKey;
+                        return updated;
+                    });
+
+                    uploadedUrls.push(fileKey);
+
+                } catch (fileErr) {
+                    console.error('File upload error:', fileErr);
+                    setFiles(prev => {
+                        const updated = [...prev];
+                        updated[i].error = 'Failed';
+                        return updated;
+                    });
+                    throw fileErr; // Stop whole process or continue? Continue for others?
+                    // For now, if one fails, we stop.
+                }
             }
 
             onUploadComplete(uploadedUrls);

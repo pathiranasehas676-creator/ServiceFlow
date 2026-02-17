@@ -1,10 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType } from '@prisma/client';
+import { EmailService } from '../common/email/email.service';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private prisma: PrismaService) { }
+  private readonly logger = new Logger(NotificationsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) { }
 
   async create(
     userId: string,
@@ -12,17 +18,53 @@ export class NotificationsService {
     title: string,
     message: string,
     entity?: { type: string; id: string },
+    metadata?: any,
   ) {
-    return this.prisma.notification.create({
-      data: {
-        userId,
-        type,
-        title,
-        message,
-        entityType: entity?.type,
-        entityId: entity?.id,
-      },
-    });
+    try {
+      // 1. Create DB Notification
+      const notification = await this.prisma.notification.create({
+        data: {
+          userId,
+          type,
+          title,
+          message,
+          entityType: entity?.type,
+          entityId: entity?.id,
+          metadata: metadata || {},
+        },
+      });
+
+      // 2. Send Email (Async, don't block)
+      this.sendEmailNotification(userId, type, title, message).catch(err => {
+        this.logger.error(`Failed to send email notification to user ${userId}: ${err.message}`);
+      });
+
+      // 3. TODO: Emit SSE event
+
+      return notification;
+    } catch (error) {
+      this.logger.error(`Failed to create notification: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  private async sendEmailNotification(userId: string, type: NotificationType, title: string, message: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.email) return;
+
+    // Simple Template Logic (could be extracted later)
+    const emailSubject = `[ServiceFlow] ${title}`;
+    const emailHtml = `
+      <div style="font-family: sans-serif; padding: 20px;">
+        <h2>${title}</h2>
+        <p>${message}</p>
+        <p>Log in to ServiceFlow to view details.</p>
+        <hr />
+        <small>This is an automated message.</small>
+      </div>
+    `;
+
+    await this.emailService.send(user.email, emailSubject, emailHtml);
   }
 
   async findAll(userId: string, page: number = 1, limit: number = 20) {
@@ -38,7 +80,7 @@ export class NotificationsService {
     ]);
 
     return {
-      items,
+      data: items, // Changed from 'items' to 'data' for consistency
       meta: {
         total,
         page,
@@ -56,15 +98,15 @@ export class NotificationsService {
 
   async markAsRead(userId: string, id: string) {
     return this.prisma.notification.updateMany({
-      where: { id, userId },
-      data: { isRead: true },
+      where: { id, userId, isRead: false },
+      data: { isRead: true, readAt: new Date() },
     });
   }
 
   async markAllRead(userId: string) {
     return this.prisma.notification.updateMany({
       where: { userId, isRead: false },
-      data: { isRead: true },
+      data: { isRead: true, readAt: new Date() },
     });
   }
 }

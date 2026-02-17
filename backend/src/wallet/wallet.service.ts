@@ -132,7 +132,7 @@ export class WalletService {
     return prisma.transaction.create({
       data: {
         walletId: wallet.id,
-        type: TransactionType.HOLD,
+        type: 'HOLD' as any,
         amountCents,
         status: TransactionStatus.COMPLETED,
         referenceType: refType,
@@ -180,7 +180,7 @@ export class WalletService {
     return prisma.transaction.create({
       data: {
         walletId: wallet.id,
-        type: TransactionType.RELEASE,
+        type: 'RELEASE' as any,
         amountCents,
         status: TransactionStatus.COMPLETED,
         referenceType: refType,

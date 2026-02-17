@@ -34,6 +34,7 @@ const navigationGroups = [
         items: [
             { name: 'Services', href: '/admin/services', icon: Briefcase },
             { name: 'Finance', href: '/admin/finance', icon: Wallet },
+            { name: 'Verifications', href: '/admin/verifications', icon: UserCheck },
             { name: 'Users & Roles', href: '/admin/users', icon: Users },
         ]
     },

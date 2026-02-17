@@ -39,7 +39,7 @@ function ResetPasswordForm() {
             try {
                 const response = await api.post('/auth/verify-reset-token', { token });
                 setTokenValid(true);
-                setUserEmail(response.data.email);
+                setUserEmail(response.email);
             } catch (err: any) {
                 setError(err.response?.data?.message || 'Invalid or expired reset token');
                 setTokenValid(false);

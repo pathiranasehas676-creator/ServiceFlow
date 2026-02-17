@@ -70,11 +70,30 @@ async function refreshAccessToken(): Promise<string | null> {
     }
 }
 
+interface ApiOptions extends RequestInit {
+    params?: any;
+    skipAuth?: boolean;
+}
+
 export async function apiClient<T = any>(
     endpoint: string,
-    options: RequestInit & { skipAuth?: boolean } = {}
+    options: ApiOptions = {}
 ): Promise<T> {
-    const { skipAuth, ...fetchOptions } = options;
+    const { skipAuth, params, ...fetchOptions } = options;
+
+    let requestUrl = `${API_BASE_URL}${endpoint}`;
+    if (params) {
+        const searchParams = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                searchParams.append(key, String(value));
+            }
+        });
+        const qs = searchParams.toString();
+        if (qs) {
+            requestUrl += (requestUrl.includes('?') ? '&' : '?') + qs;
+        }
+    }
 
     // Get access token from auth store (will be set up next)
     const getAccessToken = () => {
@@ -103,7 +122,7 @@ export async function apiClient<T = any>(
             headers['Authorization'] = `Bearer ${token}`;
         }
 
-        return fetch(`${API_BASE_URL}${endpoint}`, {
+        return fetch(requestUrl, {
             ...fetchOptions,
             credentials: 'include', // Always include cookies for refresh token
             headers,
@@ -182,27 +201,27 @@ export async function apiClient<T = any>(
 
 // Convenience methods
 export const api = {
-    get: <T = any>(endpoint: string, options?: RequestInit) =>
+    get: <T = any>(endpoint: string, options?: ApiOptions) =>
         apiClient<T>(endpoint, { ...options, method: 'GET' }),
 
-    post: <T = any>(endpoint: string, data?: any, options?: RequestInit) =>
+    post: <T = any>(endpoint: string, data?: any, options?: ApiOptions) =>
         apiClient<T>(endpoint, {
             ...options,
             method: 'POST',
             body: data ? JSON.stringify(data) : undefined,
         }),
 
-    put: <T = any>(endpoint: string, data?: any, options?: RequestInit) =>
+    put: <T = any>(endpoint: string, data?: any, options?: ApiOptions) =>
         apiClient<T>(endpoint, {
             ...options,
             method: 'PUT',
             body: data ? JSON.stringify(data) : undefined,
         }),
 
-    delete: <T = any>(endpoint: string, options?: RequestInit) =>
+    delete: <T = any>(endpoint: string, options?: ApiOptions) =>
         apiClient<T>(endpoint, { ...options, method: 'DELETE' }),
 
-    patch: <T = any>(endpoint: string, data?: any, options?: RequestInit) =>
+    patch: <T = any>(endpoint: string, data?: any, options?: ApiOptions) =>
         apiClient<T>(endpoint, {
             ...options,
             method: 'PATCH',

@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { format } from 'date-fns';
 
 export function BankVerificationsTab() {
@@ -30,8 +30,8 @@ export function BankVerificationsTab() {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const res = await apiClient.get('/admin/requests/banks');
-            setRequests(res.data.data);
+            const res = await api.get('/admin/requests/banks');
+            setRequests(res.data || []);
         } catch (error) {
             toast.error('Failed to load bank verifications');
         } finally {
@@ -46,7 +46,7 @@ export function BankVerificationsTab() {
     const handleApprove = async (id: string) => {
         if (!confirm('Approve this bank verification?')) return;
         try {
-            await apiClient.post(`/admin/requests/banks/${id}/approve`, { note: 'Approved by admin' });
+            await api.post(`/admin/requests/banks/${id}/approve`, { note: 'Approved by admin' });
             toast.success('Bank approved');
             fetchRequests();
         } catch (error) {
@@ -58,7 +58,7 @@ export function BankVerificationsTab() {
         const reason = prompt('Reason for rejection:');
         if (!reason) return;
         try {
-            await apiClient.post(`/admin/requests/banks/${id}/reject`, { reason });
+            await api.post(`/admin/requests/banks/${id}/reject`, { reason });
             toast.success('Bank rejected');
             fetchRequests();
         } catch (error) {

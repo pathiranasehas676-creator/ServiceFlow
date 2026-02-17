@@ -23,7 +23,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 export default function AuditLogsPage() {
     const [logs, setLogs] = React.useState<any[]>([]);
@@ -33,8 +33,8 @@ export default function AuditLogsPage() {
     const fetchLogs = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/admin/audit-logs');
-            setLogs(response.data);
+            const data = await api.get('/admin/audit-logs');
+            setLogs(data || []);
         } catch (error) {
             toast.error('Failed to load audit logs');
         } finally {

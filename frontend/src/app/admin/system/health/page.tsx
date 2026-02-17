@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 export default function SystemHealthPage() {
     const [health, setHealth] = React.useState<any>(null);
@@ -22,8 +22,8 @@ export default function SystemHealthPage() {
     const fetchHealth = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/admin/system/health');
-            setHealth(response.data);
+            const data = await api.get('/admin/system/health');
+            setHealth(data);
         } catch (error) {
             toast.error('Failed to fetch system health');
         } finally {

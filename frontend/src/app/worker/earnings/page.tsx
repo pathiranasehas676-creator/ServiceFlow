@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { Wallet, PayoutRequest } from '@/lib/types/payment';
 import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,17 +14,17 @@ export default function WorkerEarningsPage() {
     const [amount, setAmount] = useState('');
     const { data: wallet } = useQuery<Wallet>({
         queryKey: ['worker', 'wallet'],
-        queryFn: async () => apiClient.get('/worker/wallet').then(res => res.data)
+        queryFn: async () => api.get('/worker/wallet')
     });
 
     // Payout logic
     const { mutate: requestPayout } = useMutation({
         mutationFn: async (amountCents: number) => {
-            return apiClient.post('/worker/payouts', { amountCents });
+            return api.post('/worker/payouts', { amountCents });
         },
         onSuccess: () => {
             toast.success("Payout Requested");
-            queryClient.invalidateQueries(['worker', 'wallet']);
+            queryClient.invalidateQueries({ queryKey: ['worker', 'wallet'] });
             setAmount('');
         },
         onError: (err: any) => {

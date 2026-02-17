@@ -28,7 +28,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 export default function UsersPage() {
     const [users, setUsers] = React.useState<any[]>([]);
@@ -38,8 +38,8 @@ export default function UsersPage() {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/admin/users');
-            setUsers(response.data);
+            const data = await api.get('/admin/users');
+            setUsers(data || []);
         } catch (error) {
             toast.error('Failed to load users');
         } finally {
@@ -55,7 +55,7 @@ export default function UsersPage() {
         const reason = prompt('Enter reason for blacklisting:');
         if (!reason) return;
         try {
-            await apiClient.post(`/admin/users/${id}/blacklist`, { reason });
+            await api.post(`/admin/users/${id}/blacklist`, { reason });
             toast.success('User blacklisted');
             fetchUsers();
         } catch (error) {

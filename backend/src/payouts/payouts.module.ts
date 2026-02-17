@@ -10,9 +10,10 @@ import { PayoutsService } from './payouts.service';
 import { StorageModule } from '../storage/storage.module';
 
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PrismaModule, WalletModule, StorageModule, AuthModule],
+  imports: [PrismaModule, WalletModule, StorageModule, AuthModule, NotificationsModule],
   controllers: [PayoutsController, WorkerPayoutsController],
   providers: [PayoutsService],
   exports: [PayoutsService],

@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 interface PayoutRequest {
     id: string;
@@ -66,9 +66,10 @@ export function PayoutsTab() {
     const fetchPayouts = async () => {
         setLoading(true);
         try {
-            const res = await apiClient.get('/admin/finance/payouts');
-            const data = Array.isArray(res.data) ? res.data : res.data.data; // Handle pagination or list
-            setPayouts(data || []);
+            const data = await api.get('/admin/finance/payouts');
+            // Assuming api.get returns the data directly
+            const list = Array.isArray(data) ? data : data.data;
+            setPayouts(list || []);
         } catch (error) {
             toast.error('Failed to load payouts');
         } finally {
@@ -84,7 +85,7 @@ export function PayoutsTab() {
         if (!confirm('Approve this payout?')) return;
         setProcessingId(id);
         try {
-            await apiClient.post(`/admin/finance/payouts/${id}/approve`);
+            await api.post(`/admin/finance/payouts/${id}/approve`);
             toast.success('Payout approved');
             fetchPayouts();
         } catch (error) {
@@ -97,7 +98,7 @@ export function PayoutsTab() {
     const handleMarkProcessing = async (id: string) => {
         setProcessingId(id);
         try {
-            await apiClient.post(`/admin/finance/payouts/${id}/mark-processing`);
+            await api.post(`/admin/finance/payouts/${id}/mark-processing`);
             toast.success('Marked as PROCESSING');
             fetchPayouts();
         } catch (error) {
@@ -111,7 +112,7 @@ export function PayoutsTab() {
         if (!selectedPayout || !rejectReason) return;
         setProcessingId(selectedPayout.id);
         try {
-            await apiClient.post(`/admin/finance/payouts/${selectedPayout.id}/reject`, { reason: rejectReason });
+            await api.post(`/admin/finance/payouts/${selectedPayout.id}/reject`, { reason: rejectReason });
             toast.success('Payout rejected');
             setRejectOpen(false);
             fetchPayouts();
@@ -128,10 +129,10 @@ export function PayoutsTab() {
         if (!selectedPayout || !adminPassword) return;
         setProcessingId(selectedPayout.id);
         try {
-            const res = await apiClient.post(`/admin/finance/payouts/${selectedPayout.id}/bank-details`, {
+            const data = await api.post(`/admin/finance/payouts/${selectedPayout.id}/bank-details`, {
                 password: adminPassword
             });
-            setBankDetails(res.data.wallet.user.workerProfile.bankDetails);
+            setBankDetails(data.wallet.user.workerProfile.bankDetails);
             toast.success('Bank details verified');
         } catch (error) {
             toast.error('Invalid password or unauthorized');
@@ -147,11 +148,11 @@ export function PayoutsTab() {
 
         try {
             // 1. Presign
-            const presignRes = await apiClient.post('/storage/receipt/presign', {
+            const presignRes = await api.post('/storage/receipt/presign', {
                 mimeType: receiptFile.type,
                 sizeBytes: receiptFile.size,
             });
-            const { uploadUrl, key } = presignRes.data;
+            const { uploadUrl, key } = presignRes;
 
             // 2. Upload
             await fetch(uploadUrl, {
@@ -161,9 +162,9 @@ export function PayoutsTab() {
             });
 
             // 3. Mark Paid
-            await apiClient.post(`/admin/finance/payouts/${selectedPayout.id}/mark-paid`, {
-                receiptFileKey: key,
+            await api.post(`/admin/finance/payouts/${selectedPayout.id}/mark-paid`, {
                 paymentReference: paymentReference || undefined,
+                receiptFileKey: key,
             });
 
             toast.success('Payout completed successfully');

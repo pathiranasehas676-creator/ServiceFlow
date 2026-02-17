@@ -76,6 +76,8 @@ enum NotificationType {
   JOB_ASSIGNED
   PROOF_DECISION
   PAYOUT_STATUS
+  VERIFICATION_STATUS
+  TICKET_UPDATE
   COMMENT_REPLY
   ADMIN_ALERT_SECURITY
   SESSION_REVOKED
@@ -166,6 +168,7 @@ model User {
   // Payment Administration
   approvedJobPayments JobPayment[]     @relation("PaymentApprover")
   paidJobPayments     JobPayment[]     @relation("PaymentPayer")
+  apiRequestLogs      ApiRequestLog[]
 
   @@index([email])
   @@index([role, isActive])
@@ -739,7 +742,10 @@ model Notification {
   entityType   String?          @db.VarChar(50) // JOB, PAYOUT, TICKET
   entityId     String?          @db.Uuid
   
+  metadata     Json?
+  
   isRead       Boolean          @default(false)
+  readAt       DateTime?
   createdAt    DateTime         @default(now())
   
   @@index([userId])
@@ -941,4 +947,27 @@ model FileObject {
   
   @@index([uploadedBy])
   @@map("file_objects")
+}
+
+model ApiRequestLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  method      String   @db.VarChar(10)
+  path        String   @db.VarChar(500)
+  statusCode  Int
+  durationMs  Int
+  
+  role        String?  @db.VarChar(50)
+  userId      String?  @db.Uuid
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  ipAddress   String?  @db.VarChar(45)
+  userAgent   String?  @db.Text
+  
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([path])
+  @@index([statusCode])
+  @@index([userId])
+  @@map("api_request_logs")
 }

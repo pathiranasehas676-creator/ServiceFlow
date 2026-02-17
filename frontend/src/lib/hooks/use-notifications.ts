@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../api-client';
+import { api } from '@/lib/apiClient';
 import { useEffect } from 'react';
 
 export function useNotifications(page: number = 1) {
@@ -10,8 +10,8 @@ export function useNotifications(page: number = 1) {
     const notificationsQuery = useQuery({
         queryKey: ['notifications', page],
         queryFn: async () => {
-            const res = await apiClient.get('/worker/notifications', { params: { page } });
-            return res.data;
+            const res = await api.get('/worker/notifications', { params: { page } });
+            return res || { items: [], meta: {} };
         },
         refetchInterval: 20000, // 20s polling as requested
     });
@@ -19,27 +19,29 @@ export function useNotifications(page: number = 1) {
     const unreadCountQuery = useQuery({
         queryKey: ['notifications', 'unread-count'],
         queryFn: async () => {
-            const res = await apiClient.get('/worker/notifications/unread-count');
-            return res.data.count;
+            const res = await api.get('/worker/notifications/unread-count');
+            return res?.count || 0;
         },
         refetchInterval: 20000,
     });
 
     const markReadMutation = useMutation({
         mutationFn: async (id: string) => {
-            await apiClient.post(`/worker/notifications/${id}/read`);
+            await api.post(`/worker/notifications/${id}/read`);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
         }
     });
 
     const markAllReadMutation = useMutation({
         mutationFn: async () => {
-            await apiClient.post('/worker/notifications/read-all');
+            await api.post('/worker/notifications/read-all');
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
         }
     });
 

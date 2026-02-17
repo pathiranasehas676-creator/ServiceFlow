@@ -65,7 +65,7 @@ export function CommandPalette() {
                         <ShieldCheck className="mr-2 h-4 w-4" />
                         <span>Worker Verifications</span>
                     </CommandItem>
-                    <CommandItem onSelect={() => runCommand(() => router.push('/admin/payouts'))}>
+                    <CommandItem onSelect={() => runCommand(() => router.push('/admin/finance?tab=payouts'))}>
                         <CreditCard className="mr-2 h-4 w-4" />
                         <span>Payout Requests</span>
                     </CommandItem>

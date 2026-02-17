@@ -184,6 +184,15 @@ export class AuthService {
     }
   }
 
+  async validateUser(email: string, pass: string): Promise<any> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (user && await argon2.verify(user.passwordHash, pass)) {
+      const { passwordHash, ...result } = user;
+      return result;
+    }
+    return null;
+  }
+
   async login(dto: LoginDto, ip: string, userAgent: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -267,7 +276,7 @@ export class AuthService {
   }
 
   async verify2FA(dto: Verify2FADto, ip: string, userAgent: string) {
-    const challenge = await this.prisma.twoFactorChallenge.findUnique({
+    const challenge: any = await this.prisma.twoFactorChallenge.findUnique({
       where: { id: dto.challengeId },
       include: { user: true },
     });
@@ -289,7 +298,7 @@ export class AuthService {
     if (!isValid) {
       await this.prisma.twoFactorChallenge.update({
         where: { id: challenge.id },
-        data: { attemptsCount: { increment: 1 } },
+        data: { attemptsCount: { increment: 1 } } as any,
       });
       throw new UnauthorizedException('Invalid OTP');
     }
@@ -304,8 +313,8 @@ export class AuthService {
 
   async refreshTokens(refreshToken: string, ip: string, userAgent: string) {
     const refreshTokenHash = await this.hashToken(refreshToken);
-    const session = await this.prisma.userSession.findUnique({
-      where: { refreshTokenHash },
+    const session: any = await this.prisma.userSession.findUnique({
+      where: { refreshTokenHash: refreshTokenHash as any },
     });
 
     if (!session || session.revokedAt || session.expiresAt < new Date()) {
@@ -339,7 +348,7 @@ export class AuthService {
       data: {
         revokedAt: new Date(),
         rotatedToId: newSession.sessionId,
-      },
+      } as any,
     });
 
     return newSession;
@@ -348,7 +357,7 @@ export class AuthService {
   async logout(sessionId: string) {
     await this.prisma.userSession.update({
       where: { id: sessionId },
-      data: { revokedAt: new Date() },
+      data: { revokedAt: new Date() } as any,
     });
   }
 
@@ -360,8 +369,8 @@ export class AuthService {
       const isPasswordValid = await argon2.verify(user.passwordHash, password);
       if (!isPasswordValid) throw new UnauthorizedException('Invalid password');
     } else if (otp) {
-      const challenge = await this.prisma.twoFactorChallenge.findFirst({
-        where: { userId, consumedAt: null, expiresAt: { gt: new Date() } },
+      const challenge: any = await this.prisma.twoFactorChallenge.findFirst({
+        where: { userId, consumedAt: null, expiresAt: { gt: new Date() } } as any,
         orderBy: { createdAt: 'desc' },
       });
       if (!challenge) throw new BadRequestException('No active 2FA challenge');
@@ -370,7 +379,7 @@ export class AuthService {
 
       await this.prisma.twoFactorChallenge.update({
         where: { id: challenge.id },
-        data: { consumedAt: new Date() },
+        data: { consumedAt: new Date() } as any,
       });
     } else {
       throw new BadRequestException('Password or OTP required');
@@ -384,7 +393,7 @@ export class AuthService {
 
   async getSessions(userId: string) {
     return this.prisma.userSession.findMany({
-      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } } as any,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -392,14 +401,14 @@ export class AuthService {
         userAgent: true,
         createdAt: true,
         lastUsedAt: true,
-      },
+      } as any,
     });
   }
 
   async revokeSession(userId: string, sessionId: string) {
     await this.prisma.userSession.updateMany({
       where: { id: sessionId, userId },
-      data: { revokedAt: new Date() },
+      data: { revokedAt: new Date() } as any,
     });
   }
 
@@ -409,8 +418,8 @@ export class AuthService {
         userId,
         revokedAt: null,
         id: exceptSessionId ? { not: exceptSessionId } : undefined,
-      },
-      data: { revokedAt: new Date() },
+      } as any,
+      data: { revokedAt: new Date() } as any,
     });
   }
 
@@ -430,7 +439,7 @@ export class AuthService {
         ipAddress: ip,
         userAgent: userAgent,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      },
+      } as any,
     });
 
     return {
@@ -476,7 +485,7 @@ export class AuthService {
         userId,
         otpHash,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
-      },
+      } as any,
     });
 
     console.log(`[DEV ONLY] OTP for user ${userId}: ${otp}`);
@@ -510,7 +519,7 @@ export class AuthService {
     ipAddress: string,
     success: boolean,
   ) {
-    await this.prisma.loginAttempt.create({
+    await (this.prisma as any).loginAttempt.create({
       data: { email, ipAddress, success },
     });
   }
@@ -540,8 +549,8 @@ export class AuthService {
         userId: user.id,
         usedAt: null,
         expiresAt: { gt: new Date() },
-      },
-      data: { usedAt: new Date() }, // Mark as used to invalidate
+      } as any,
+      data: { usedAt: new Date() } as any, // Mark as used to invalidate
     });
 
     // Generate secure random token (32 bytes = 64 hex chars)
@@ -549,7 +558,7 @@ export class AuthService {
     const tokenHash = await this.hashToken(resetToken);
 
     // Create reset token with 15 minute expiry
-    await this.prisma.passwordResetToken.create({
+    await (this.prisma as any).passwordResetToken.create({
       data: {
         userId: user.id,
         tokenHash,
@@ -605,8 +614,8 @@ export class AuthService {
   async verifyResetToken(token: string) {
     const tokenHash = await this.hashToken(token);
 
-    const resetToken = await this.prisma.passwordResetToken.findUnique({
-      where: { tokenHash },
+    const resetToken: any = await (this.prisma as any).passwordResetToken.findUnique({
+      where: { tokenHash: tokenHash as any },
       include: { user: { select: { email: true } } },
     });
 
@@ -628,8 +637,8 @@ export class AuthService {
   ) {
     const tokenHash = await this.hashToken(token);
 
-    const resetToken = await this.prisma.passwordResetToken.findUnique({
-      where: { tokenHash },
+    const resetToken: any = await (this.prisma as any).passwordResetToken.findUnique({
+      where: { tokenHash: tokenHash as any },
       include: { user: true },
     });
 
@@ -656,13 +665,13 @@ export class AuthService {
       });
 
       // Mark token as used
-      await tx.passwordResetToken.update({
+      await (tx as any).passwordResetToken.update({
         where: { id: resetToken.id },
         data: { usedAt: new Date() },
       });
 
       // Revoke all active sessions for security
-      await tx.userSession.updateMany({
+      await (tx as any).userSession.updateMany({
         where: {
           userId: user.id,
           revokedAt: null,

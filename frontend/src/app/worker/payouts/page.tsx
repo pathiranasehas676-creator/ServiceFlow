@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface PayoutRequest {
@@ -34,8 +34,8 @@ export default function WorkerPayoutsPage() {
     const fetchPayouts = async () => {
         setLoading(true);
         try {
-            const res = await apiClient.get('/worker/payouts');
-            setPayouts(res.data || []);
+            const data = await api.get('/worker/payouts');
+            setPayouts(data || []);
         } catch (error) {
             toast.error('Failed to load payouts');
         } finally {
@@ -49,9 +49,9 @@ export default function WorkerPayoutsPage() {
 
     const handleViewReceipt = async (id: string) => {
         try {
-            const res = await apiClient.get(`/worker/payouts/${id}/receipt-url`);
-            if (res.data.url) {
-                window.open(res.data.url, '_blank');
+            const data = await api.get(`/worker/payouts/${id}/receipt-url`);
+            if (data.url) {
+                window.open(data.url, '_blank');
             } else {
                 toast.error('Receipt URL not found');
             }

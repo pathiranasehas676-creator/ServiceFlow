@@ -32,7 +32,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 interface Service {
     id: string;
@@ -54,8 +54,8 @@ export default function ServicesPage() {
     const fetchServices = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/admin/services');
-            setServices(response.data);
+            const data = await api.get('/admin/services');
+            setServices(data || []);
         } catch (error) {
             toast.error('Failed to load services');
         } finally {
@@ -70,7 +70,7 @@ export default function ServicesPage() {
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure you want to delete this service?')) return;
         try {
-            await apiClient.delete(`/admin/services/${id}`);
+            await api.delete(`/admin/services/${id}`);
             toast.success('Service deleted');
             fetchServices();
         } catch (error) {
@@ -91,10 +91,10 @@ export default function ServicesPage() {
 
         try {
             if (editingService) {
-                await apiClient.put(`/admin/services/${editingService.id}`, data);
+                await api.put(`/admin/services/${editingService.id}`, data);
                 toast.success('Service updated');
             } else {
-                await apiClient.post('/admin/services', data);
+                await api.post('/admin/services', data);
                 toast.success('Service created');
             }
             setDialogOpen(false);

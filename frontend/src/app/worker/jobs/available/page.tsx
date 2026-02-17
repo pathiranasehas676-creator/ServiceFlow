@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapPin, DollarSign, Briefcase, Filter, Search, Clock } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { toast } from 'sonner';
 import { cn, formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
@@ -23,10 +23,10 @@ export default function AvailableJobsPage() {
         setLoading(true);
         try {
             // In real app, pass radius and lat/long
-            const response = await apiClient.get('/jobs/available', {
+            const data = await api.get('/jobs/available', {
                 params: { radius }
             });
-            setJobs(Array.isArray(response.data) ? response.data : []);
+            setJobs(Array.isArray(data) ? data : []);
         } catch (error) {
             toast.error('Failed to load available jobs');
         } finally {
@@ -46,7 +46,7 @@ export default function AvailableJobsPage() {
 
         setAcceptingId(id);
         try {
-            await apiClient.post(`/jobs/${id}/accept`);
+            await api.post(`/jobs/${id}/accept`);
             toast.success('Job accepted successfully!');
             // Refresh list to remove accepted job
             setJobs(prev => prev.filter(j => j.id !== id));

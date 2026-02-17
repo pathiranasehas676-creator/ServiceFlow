@@ -21,6 +21,8 @@ import { AdminFinanceModule } from './admin/finance/finance.module';
 import { VerificationModule } from './verification/verification.module';
 
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 
 @Module({
   imports: [
@@ -48,6 +50,12 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     RiskModule,
     KycModule,
     VerificationModule,
+  ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RequestLoggingInterceptor,
+    },
   ],
 })
 export class AppModule { }

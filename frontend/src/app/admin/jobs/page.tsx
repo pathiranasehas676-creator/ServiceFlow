@@ -27,7 +27,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { format } from 'date-fns';
 
 export default function JobsPage() {
@@ -43,8 +43,8 @@ export default function JobsPage() {
             if (statusFilter !== 'ALL') params.status = statusFilter;
             if (search) params.q = search;
 
-            const response = await apiClient.get('/jobs/admin/all', { params });
-            setJobs(response.data.data);
+            const response = await api.get('/jobs/admin/all', { params });
+            setJobs(response.data || []);
         } catch (error) {
             toast.error('Failed to load jobs');
         } finally {

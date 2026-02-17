@@ -30,6 +30,14 @@ export class AdminController {
     return this.adminService.getStats();
   }
 
+  @Get('api-metrics')
+  @Roles('ADMIN')
+  @Permissions('VIEW_ANALYTICS')
+  getApiMetrics() {
+    return this.adminService.getApiMetrics();
+  }
+
+
   @Get('audit-logs')
   @Roles('ADMIN')
   @Permissions('VIEW_AUDIT_LOGS')

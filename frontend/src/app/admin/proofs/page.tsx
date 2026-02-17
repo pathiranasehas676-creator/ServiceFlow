@@ -10,7 +10,7 @@ import { StatusBadge } from '@/components/admin/status-badge';
 import { LoadingSkeletonTable } from '@/components/admin/loading-skeleton-table';
 import { Search, FileCheck, Eye, Filter } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { toast } from 'sonner';
 import { ProofGallery } from '@/components/admin/proofs/proof-gallery';
 
@@ -27,8 +27,8 @@ export default function ProofsPage() {
     const loadProofs = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/admin/proofs');
-            setProofs(Array.isArray(response.data) ? response.data : []);
+            const data = await api.get('/admin/proofs');
+            setProofs(Array.isArray(data) ? data : []);
         } catch (error) {
             toast.error('Failed to load proofs');
         } finally {

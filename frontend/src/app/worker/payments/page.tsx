@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { JobPayment } from '@/lib/types/payment';
 import { Card, CardContent } from '@/components/ui/card'; // Check if these exist in ui/card.tsx
 import { Badge } from '@/components/ui/badge';
@@ -10,8 +10,7 @@ export default function WorkerPaymentsPage() {
     const { data: payments, isLoading } = useQuery<JobPayment[]>({
         queryKey: ['worker', 'payments'],
         queryFn: async () => {
-            const res = await apiClient.get('/worker/payments');
-            return res.data;
+            return await api.get('/worker/payments');
         }
     });
 

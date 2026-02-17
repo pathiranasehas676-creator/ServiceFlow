@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { Job } from '@/lib/types/worker';
 import { toast } from 'sonner';
 
@@ -9,15 +9,13 @@ export function useAvailableJobs(filters: { serviceId?: string; district?: strin
     const availableJobsQuery = useQuery<Job[]>({
         queryKey: ['jobs', 'available', filters],
         queryFn: async () => {
-            const response = await apiClient.get('/jobs/available', { params: filters });
-            return response.data;
+            return await api.get('/jobs/available', { params: filters });
         },
     });
 
     const acceptJobMutation = useMutation({
         mutationFn: async (jobId: string) => {
-            const response = await apiClient.post(`/jobs/${jobId}/accept`);
-            return response.data;
+            return await api.post(`/jobs/${jobId}/accept`);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['jobs', 'available'] });

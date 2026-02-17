@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 export default function SecurityAlertsPage() {
     const [alerts, setAlerts] = React.useState<any[]>([]);
@@ -21,8 +21,8 @@ export default function SecurityAlertsPage() {
 
     const fetchAlerts = async () => {
         try {
-            const response = await apiClient.get('/admin/security-alerts');
-            setAlerts(response.data.data);
+            const res = await api.get('/admin/security-alerts');
+            setAlerts(res.data || []);
         } catch (error) {
             toast.error('Failed to fetch security alerts');
         } finally {
@@ -36,7 +36,7 @@ export default function SecurityAlertsPage() {
 
     const resolveAlert = async (id: string) => {
         try {
-            await apiClient.post(`/admin/security-alerts/${id}/resolve`);
+            await api.post(`/admin/security-alerts/${id}/resolve`);
             toast.success('Alert resolved');
             fetchAlerts();
         } catch (error) {

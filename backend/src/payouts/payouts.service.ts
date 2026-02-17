@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
-import { PayoutStatus, PayoutType, AuditAction, UserRole, Prisma, TransactionType } from '@prisma/client';
+import { PayoutStatus, PayoutType, AuditAction, UserRole, Prisma, TransactionType, NotificationType } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
+import { EncryptionService } from '../common/services/encryption.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PayoutsService {
@@ -16,7 +18,9 @@ export class PayoutsService {
   constructor(
     private prisma: PrismaService,
     private walletService: WalletService,
-    private storage: StorageService, // Added for receipt URL generation
+    private storage: StorageService,
+    private encryptionService: EncryptionService,
+    private notificationsService: NotificationsService,
   ) { }
 
   /**
@@ -66,8 +70,12 @@ export class PayoutsService {
    * Admin approves payout (Status Update Only)
    */
   async approvePayout(payoutId: string, adminId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      const payout = await tx.payoutRequest.findUnique({ where: { id: payoutId } });
+    // 1. Transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      const payout = await tx.payoutRequest.findUnique({
+        where: { id: payoutId },
+        include: { wallet: true } // Need wallet to get userId
+      });
       if (!payout || payout.status !== PayoutStatus.PENDING) {
         throw new BadRequestException('Payout is not pending');
       }
@@ -79,12 +87,27 @@ export class PayoutsService {
           reviewedBy: adminId,
           reviewedAt: new Date(),
         },
+        include: { wallet: true },
       });
 
       await this.recordStatusChange(tx, payout.id, PayoutStatus.PENDING, PayoutStatus.APPROVED, adminId);
       await this.logAudit(tx, adminId, AuditAction.APPROVE, 'PayoutRequest', payoutId, 'Approved payout request');
       return updated;
     });
+
+    // 2. Notification
+    if (result && result.wallet) {
+      await this.notificationsService.create(
+        result.wallet.userId,
+        NotificationType.PAYOUT_STATUS,
+        'Payout Approved',
+        `Your payout of $${(result.amountCents / 100).toFixed(2)} has been approved and is being processed.`,
+        { type: 'PAYOUT', id: result.id },
+        { status: 'APPROVED', amountCents: result.amountCents }
+      );
+    }
+
+    return result;
   }
 
   /**
@@ -112,7 +135,8 @@ export class PayoutsService {
    * Admin rejects payout (Release held funds)
    */
   async rejectPayout(payoutId: string, reason: string, adminId: string) {
-    return this.prisma.$transaction(async (tx) => {
+    // 1. Transaction
+    const result = await this.prisma.$transaction(async (tx) => {
       const payout = await tx.payoutRequest.findUnique({
         where: { id: payoutId },
         include: { wallet: true },
@@ -133,6 +157,7 @@ export class PayoutsService {
           reviewedBy: adminId,
           reviewedAt: new Date(),
         },
+        include: { wallet: true },
       });
 
       // Release Funds (Pending -> Available)
@@ -149,13 +174,28 @@ export class PayoutsService {
       await this.logAudit(tx, adminId, AuditAction.REJECT, 'PayoutRequest', payoutId, `Rejected payout: ${reason}`);
       return updated;
     });
+
+    // 2. Notification
+    if (result && result.wallet) {
+      await this.notificationsService.create(
+        result.wallet.userId,
+        NotificationType.PAYOUT_STATUS,
+        'Payout Rejected',
+        `Your payout request was rejected. Reason: ${reason}`,
+        { type: 'PAYOUT', id: result.id },
+        { status: 'REJECTED', reason }
+      );
+    }
+
+    return result;
   }
 
   /**
    * Admin marks payout as PAID (Debit pending funds, upload receipt)
    */
   async markPaid(payoutId: string, adminId: string, receiptKey: string, paymentReference?: string, mimeType = 'image/jpeg', sizeBytes = 0) {
-    return this.prisma.$transaction(async (tx) => {
+    // 1. Transaction
+    const result = await this.prisma.$transaction(async (tx) => {
       const payout = await tx.payoutRequest.findUnique({
         where: { id: payoutId },
         include: { wallet: true },
@@ -176,7 +216,7 @@ export class PayoutsService {
 
       // Safeguard: Payment Reference Uniqueness
       if (paymentReference) {
-        const dup = await tx.payoutRequest.findFirst({ where: { paymentReference } });
+        const dup = await tx.payoutRequest.findFirst({ where: { paymentReference } as any });
         if (dup && dup.id !== payoutId) throw new BadRequestException('Duplicate Payment Reference');
       }
 
@@ -196,7 +236,8 @@ export class PayoutsService {
           processedAt: new Date(),
           transactionRef: paymentReference || `TX-${Date.now()}`, // Legacy support
           paymentReference,
-        },
+        } as any,
+        include: { wallet: true },
       });
 
       // Create Receipt
@@ -225,6 +266,20 @@ export class PayoutsService {
       await this.logAudit(tx, adminId, AuditAction.UPDATE, 'PayoutRequest', payoutId, `Marked payout as PAID. Ref: ${paymentReference}`);
       return updated;
     });
+
+    // 2. Notification
+    if (result && result.wallet) {
+      await this.notificationsService.create(
+        result.wallet.userId,
+        NotificationType.PAYOUT_STATUS,
+        'Payout Paid',
+        `Your payout of $${(result.amountCents / 100).toFixed(2)} has been paid! Reference: ${paymentReference || 'N/A'}`,
+        { type: 'PAYOUT', id: result.id },
+        { status: 'PAID', reference: paymentReference }
+      );
+    }
+
+    return result;
   }
 
   // Helpers
@@ -232,7 +287,7 @@ export class PayoutsService {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const history = await tx.payoutStatusHistory.findMany({
+    const history = await (tx as any).payoutStatusHistory.findMany({
       where: {
         actorId: staffId,
         toStatus: PayoutStatus.PAID,
@@ -249,7 +304,7 @@ export class PayoutsService {
   }
 
   private async recordStatusChange(tx: Prisma.TransactionClient, payoutRequestId: string, fromStatus: PayoutStatus | null, toStatus: PayoutStatus, actorId: string, reason?: string) {
-    await tx.payoutStatusHistory.create({
+    await (tx as any).payoutStatusHistory.create({
       data: {
         payoutRequestId,
         fromStatus,
@@ -324,7 +379,7 @@ export class PayoutsService {
       }
     });
 
-    const bankDetails = payout.wallet?.user?.workerProfile?.bankDetails;
+    const bankDetails = (payout.wallet?.user?.workerProfile as any)?.bankDetails;
     let decryptedAccountNumber = null;
 
     if (bankDetails) {

@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 export function TransactionList() {
@@ -19,8 +19,8 @@ export function TransactionList() {
     const fetchTransactions = async () => {
         setLoading(true);
         try {
-            const res = await apiClient.get('/admin/finance/transactions');
-            setTransactions(res.data.data);
+            const res = await api.get('/admin/finance/transactions');
+            setTransactions(res.data || []);
         } catch (error) {
             toast.error('Failed to load transactions');
         } finally {

@@ -11,13 +11,13 @@ import {
     DrawerTitle,
 } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area'; // Check if exists, else use div overflow-auto
-import { Separator } from '@/components/ui/separator'; // Check if exists
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { CheckCircle, XCircle, ShieldCheck, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 interface VerificationDrawerProps {
     verification: any | null; // Typed strongly in real app
@@ -36,7 +36,7 @@ export function VerificationDrawer({ verification, open, onClose, onStatusChange
     const handleApprove = async () => {
         setIsSubmitting(true);
         try {
-            await apiClient.post(`/admin/verifications/${verification.id}/approve`);
+            await api.post(`/admin/verifications/${verification.id}/approve`);
             toast.success('Worker verified successfully');
             onStatusChange();
             onClose();
@@ -54,7 +54,7 @@ export function VerificationDrawer({ verification, open, onClose, onStatusChange
         }
         setIsSubmitting(true);
         try {
-            await apiClient.post(`/admin/verifications/${verification.id}/reject`, { reason: rejectionReason });
+            await api.post(`/admin/verifications/${verification.id}/reject`, { reason: rejectionReason });
             toast.warning('Verification rejected');
             onStatusChange();
             onClose();
