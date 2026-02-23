@@ -8,25 +8,36 @@ async function main() {
   console.log('🌱 Starting database seed...');
 
   // Clean existing data (in development only!)
-  await (prisma as any).userPermission.deleteMany();
-  await (prisma as any).rolePermission.deleteMany();
-  await (prisma as any).permission.deleteMany();
-  await prisma.adminAuditLog.deleteMany();
-  await prisma.notification.deleteMany();
-  await prisma.ticketMessage.deleteMany();
-  await prisma.supportTicket.deleteMany();
+  await prisma.apiRequestLog.deleteMany();
+  await prisma.jobComment.deleteMany();
+  await prisma.disputeMessage.deleteMany();
+  await prisma.dispute.deleteMany();
+  await prisma.rating.deleteMany();
+  await prisma.jobProof.deleteMany();
+  await prisma.jobStatusHistory.deleteMany();
+  await prisma.jobPayment.deleteMany();
+  await prisma.job.deleteMany();
+  await prisma.service.deleteMany();
+  await prisma.payoutStatusHistory.deleteMany();
   await prisma.payoutReceipt.deleteMany();
   await prisma.payoutRequest.deleteMany();
   await prisma.transaction.deleteMany();
   await prisma.wallet.deleteMany();
-  await prisma.rating.deleteMany();
-  await prisma.jobProof.deleteMany();
-  await prisma.jobStatusHistory.deleteMany();
-  await prisma.job.deleteMany();
-  await prisma.service.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.ticketMessage.deleteMany();
+  await prisma.supportTicket.deleteMany();
+  await prisma.adminAuditLog.deleteMany();
+  await prisma.securityAlert.deleteMany();
   await prisma.idVerification.deleteMany();
+  await prisma.bankDetailsHistory.deleteMany();
   await prisma.bankDetails.deleteMany();
   await prisma.workerProfile.deleteMany();
+  await prisma.inviteToken.deleteMany();
+  await prisma.userPermission.deleteMany();
+  await prisma.rolePermission.deleteMany();
+  await prisma.permission.deleteMany();
+  await prisma.apiRequestLog.deleteMany();
+  await prisma.fileObject.deleteMany();
   await prisma.userSession.deleteMany();
   await prisma.user.deleteMany();
 
