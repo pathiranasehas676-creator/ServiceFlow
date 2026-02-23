@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -9,40 +9,50 @@ export class EncryptionService {
 
   constructor(private configService: ConfigService) {
     const hexKey = this.configService.get<string>('ENCRYPTION_KEY');
-    if (!hexKey) {
-      throw new Error('ENCRYPTION_KEY not found in configuration');
+    if (!hexKey || hexKey.length !== 64) {
+      throw new InternalServerErrorException(
+        'ENCRYPTION_KEY must be a 64-character hex string (32 bytes)',
+      );
     }
     this.key = Buffer.from(hexKey, 'hex');
   }
 
-  encrypt(text: string): { content: string; iv: string; tag: string } {
-    const iv = crypto.randomBytes(12);
+  encrypt(text: string): { content: string; iv: string; authTag: string } {
+    const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
 
-    let encrypted = cipher.update(text, 'utf8', 'base64');
-    encrypted += cipher.final('base64');
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
 
-    const tag = cipher.getAuthTag().toString('base64');
+    const authTag = cipher.getAuthTag().toString('hex');
 
     return {
       content: encrypted,
-      iv: iv.toString('base64'),
-      tag: tag,
+      iv: iv.toString('hex'),
+      authTag,
     };
   }
 
-  decrypt(encrypted: { content: string; iv: string; tag: string }): string {
+  decrypt(encryptedData: {
+    content: string;
+    iv: string;
+    authTag: string;
+  }): string {
     const decipher = crypto.createDecipheriv(
       this.algorithm,
       this.key,
-      Buffer.from(encrypted.iv, 'base64'),
+      Buffer.from(encryptedData.iv, 'hex'),
     );
 
-    decipher.setAuthTag(Buffer.from(encrypted.tag, 'base64'));
+    decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'hex'));
 
-    let decrypted = decipher.update(encrypted.content, 'base64', 'utf8');
+    let decrypted = decipher.update(encryptedData.content, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
 
     return decrypted;
+  }
+
+  hashForLookup(text: string): string {
+    return crypto.createHmac('sha256', this.key).update(text).digest('hex');
   }
 }

@@ -1,24 +1,24 @@
 'use client';
 
+import { useState } from 'react';
 import { useNotifications } from '@/lib/hooks/use-notifications';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Bell, CheckCheck, MapPin, MessageSquare, AlertTriangle, ShieldCheck, ChevronRight, Loader2, ChevronLeft } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Bell, CheckCheck, MapPin, MessageSquare, AlertTriangle, ShieldCheck, ChevronRight, Loader2, ChevronLeft, UserCheck, Ticket } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
-import { useState } from 'react';
 
 export default function NotificationsPage() {
     const [page, setPage] = useState(1);
-    const [filter, setFilter] = useState<string>('ALL');
-    const { notifications, unreadCount, markRead, markAllRead, isLoading, meta } = useNotifications(page);
+    const [filter, setFilter] = useState('ALL');
+    const { notifications, meta, unreadCount, isLoading, markRead, markAllRead } = useNotifications(page);
 
-    const filteredNotifications = notifications.filter((n: any) =>
-        filter === 'ALL' || n.type === filter
-    );
+    const filteredNotifications = filter === 'ALL'
+        ? notifications
+        : notifications.filter((n: any) => n.type === filter);
 
     const getIcon = (type: string) => {
         switch (type) {
@@ -26,6 +26,8 @@ export default function NotificationsPage() {
             case 'COMMENT_REPLY': return <MessageSquare className="h-4 w-4 text-blue-500" />;
             case 'PROOF_DECISION': return <ShieldCheck className="h-4 w-4 text-emerald-500" />;
             case 'PAYOUT_STATUS': return <Bell className="h-4 w-4 text-amber-500" />;
+            case 'VERIFICATION_STATUS': return <UserCheck className="h-4 w-4 text-teal-500" />;
+            case 'TICKET_UPDATE': return <Ticket className="h-4 w-4 text-purple-500" />;
             case 'ADMIN_ALERT_SECURITY':
             case 'SESSION_REVOKED': return <AlertTriangle className="h-4 w-4 text-red-500" />;
             default: return <Bell className="h-4 w-4 text-slate-400" />;
@@ -35,12 +37,9 @@ export default function NotificationsPage() {
     return (
         <div className="space-y-6 pb-24 max-w-4xl mx-auto">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex flex-col gap-2">
-                    <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center gap-3">
-                        Notifications
-                        {unreadCount > 0 && <Badge className="bg-indigo-600 px-2 py-0 h-6 min-w-[24px] flex items-center justify-center font-black">{unreadCount}</Badge>}
-                    </h1>
-                    <p className="text-muted-foreground font-medium text-sm">Stay updated with your latest activities.</p>
+                <div className="space-y-1">
+                    <h1 className="text-2xl font-black tracking-tight text-slate-900">Notifications</h1>
+                    <p className="text-slate-500 font-medium">Stay updated with your job activities and alerts.</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <Select value={filter} onValueChange={setFilter}>
@@ -52,6 +51,8 @@ export default function NotificationsPage() {
                             <SelectItem value="JOB_ASSIGNED" className="font-bold">JOB ASSIGNED</SelectItem>
                             <SelectItem value="PROOF_DECISION" className="font-bold">PROOF DECISION</SelectItem>
                             <SelectItem value="PAYOUT_STATUS" className="font-bold">PAYOUT STATUS</SelectItem>
+                            <SelectItem value="VERIFICATION_STATUS" className="font-bold">VERIFICATIONS</SelectItem>
+                            <SelectItem value="TICKET_UPDATE" className="font-bold">TICKETS</SelectItem>
                             <SelectItem value="COMMENT_REPLY" className="font-bold">REPLIES</SelectItem>
                         </SelectContent>
                     </Select>
@@ -119,7 +120,12 @@ export default function NotificationsPage() {
                                         {n.entityId && (
                                             <div className="pt-2">
                                                 <Button variant="secondary" size="sm" className="h-8 bg-white border border-slate-200 text-indigo-600 font-black text-[10px] tracking-widest px-4 hover:bg-slate-50 rounded-full" asChild>
-                                                    <Link href={n.entityType === 'JOB' ? `/worker/jobs/${n.entityId}` : '#'}>
+                                                    <Link href={
+                                                        n.entityType === 'JOB' ? `/worker/jobs/${n.entityId}` :
+                                                            n.entityType === 'TICKET' ? `/worker/support/${n.entityId}` :
+                                                                n.entityType === 'VERIFICATION' || n.entityType === 'BANK_DETAILS' ? '/worker/profile' :
+                                                                    '#'
+                                                    }>
                                                         INTERACT <ChevronRight className="ml-1 h-3 w-3" />
                                                     </Link>
                                                 </Button>
@@ -134,7 +140,7 @@ export default function NotificationsPage() {
             </Card>
 
             {/* Pagination */}
-            {meta.totalPages > 1 && (
+            {meta?.totalPages > 1 && (
                 <div className="flex items-center justify-center gap-4 pt-4">
                     <Button
                         variant="outline"

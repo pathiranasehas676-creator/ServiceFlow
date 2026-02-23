@@ -31,8 +31,8 @@ const navItems = [
     },
     {
         group: 'Finance', items: [
-            { name: 'My Earnings', href: '/worker/earnings', icon: Wallet },
-            { name: 'Payment History', href: '/worker/payments', icon: Receipt },
+            { name: 'My Wallet', href: '/worker/wallet', icon: Wallet },
+            { name: 'Payment History', href: '/worker/wallet', icon: Receipt }, // Both point to wallet for now as it has history
         ]
     },
     {
@@ -45,19 +45,8 @@ const navItems = [
 
 export function WorkerSidebar() {
     const pathname = usePathname();
-    const { profile } = useWorkerProfile();
+    const { profile, toggleOnlineStatus, isTogglingOnline } = useWorkerProfile();
     const queryClient = useQueryClient();
-
-    const toggleOnline = useMutation({
-        mutationFn: async (isOnline: boolean) => {
-            await api.put('/worker/availability', { isOnline });
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['worker', 'profile'] });
-            toast.info(`Status updated to ${profile?.isOnline ? 'Offline' : 'Online'}`);
-        },
-        onError: () => toast.error('Failed to update availability')
-    });
 
     return (
         <div className="hidden h-full w-64 flex-col border-r bg-slate-900 text-slate-100 md:flex">
@@ -71,19 +60,19 @@ export function WorkerSidebar() {
             <div className="px-6 py-6 border-b border-slate-800">
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Working Status</span>
-                    <Badge variant={profile?.isOnline ? "default" : "secondary"} className={cn(
+                    <Badge variant={profile?.workerProfile?.isOnline ? "default" : "secondary"} className={cn(
                         "text-[10px] h-5 rounded-full",
-                        profile?.isOnline ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : "bg-slate-800 text-slate-400"
+                        profile?.workerProfile?.isOnline ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : "bg-slate-800 text-slate-400"
                     )}>
-                        {profile?.isOnline ? 'Online' : 'Offline'}
+                        {profile?.workerProfile?.isOnline ? 'Online' : 'Offline'}
                     </Badge>
                 </div>
                 <div className="flex items-center justify-between bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
                     <div className="text-sm font-medium">Available for work</div>
                     <Switch
-                        checked={profile?.isOnline}
-                        onCheckedChange={(val) => toggleOnline.mutate(val)}
-                        disabled={toggleOnline.isPending}
+                        checked={profile?.workerProfile?.isOnline}
+                        onCheckedChange={(val) => toggleOnlineStatus(val)}
+                        disabled={isTogglingOnline}
                     />
                 </div>
             </div>

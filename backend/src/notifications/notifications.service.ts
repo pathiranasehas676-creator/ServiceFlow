@@ -2,15 +2,22 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType } from '@prisma/client';
 import { EmailService } from '../common/email/email.service';
+import { EventEmitter } from 'eventemitter3';
+import { fromEvent } from 'rxjs';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
+  private emitter = new EventEmitter();
 
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
-  ) { }
+  ) {}
+
+  subscribe(userId: string) {
+    return fromEvent(this.emitter, `notify:${userId}`);
+  }
 
   async create(
     userId: string,
@@ -35,20 +42,31 @@ export class NotificationsService {
       });
 
       // 2. Send Email (Async, don't block)
-      this.sendEmailNotification(userId, type, title, message).catch(err => {
-        this.logger.error(`Failed to send email notification to user ${userId}: ${err.message}`);
+      this.sendEmailNotification(userId, type, title, message).catch((err) => {
+        this.logger.error(
+          `Failed to send email notification to user ${userId}: ${err.message}`,
+        );
       });
 
-      // 3. TODO: Emit SSE event
+      // 3. Emit event for SSE
+      this.emitter.emit(`notify:${userId}`, { data: notification });
 
       return notification;
     } catch (error) {
-      this.logger.error(`Failed to create notification: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to create notification: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
 
-  private async sendEmailNotification(userId: string, type: NotificationType, title: string, message: string) {
+  private async sendEmailNotification(
+    userId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.email) return;
 

@@ -24,6 +24,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import dynamic from 'next/dynamic';
 import { formatDistanceToNow } from "date-fns";
+import { cn } from "@/lib/utils";
 
 // Dynamic import for MiniMap
 const JobMiniMap = dynamic(() => import('@/components/maps/job-mini-map'), {
@@ -34,8 +35,14 @@ const JobMiniMap = dynamic(() => import('@/components/maps/job-mini-map'), {
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const { profile } = useWorkerProfile();
-    const { job, isLoading, markArrived, isMarkingArrived, submitProof, isSubmittingProof } = useJobDetail(id);
-    const [proofUrls, setProofUrls] = useState<string[]>([]);
+    const {
+        job, isLoading,
+        markArrived, isMarkingArrived,
+        submitProof, isSubmittingProof,
+        cancelJob, isCancelling,
+        openDispute, isOpeningDispute
+    } = useJobDetail(id);
+    const [proofs, setProofs] = useState<any[]>([]);
 
     const handleMarkArrival = () => {
         if (!navigator.geolocation) {
@@ -43,23 +50,30 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             return;
         }
 
-        toast.info("Awaiting location access...");
+        toast.info("Awaiting high-accuracy location...");
         navigator.geolocation.getCurrentPosition(
             (pos) => {
-                markArrived({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                markArrived({
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    accuracyMeters: pos.coords.accuracy,
+                    isMock: (pos.coords as any).isMockLocation || false
+                });
             },
             (err) => {
-                toast.error("Please enable location access to mark arrival");
-            }
+                toast.error("Location access denied. Please enable GPS to mark arrival.");
+                console.error("Location error:", err);
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
     };
 
     const handleSubmit = () => {
-        if (proofUrls.length === 0) {
+        if (proofs.length === 0) {
             toast.error("Please upload at least one work proof image");
             return;
         }
-        submitProof(proofUrls);
+        submitProof(proofs);
     };
 
     if (isLoading) return <div className="max-w-5xl mx-auto p-12"><Skeleton className="h-[600px] w-full rounded-3xl" /></div>;
@@ -212,10 +226,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent className="p-8 space-y-8">
-                                        <UploadQueue jobId={job.id} onUploadComplete={setProofUrls} />
+                                        <UploadQueue jobId={job.id} onUploadComplete={setProofs} />
                                         <Button
                                             onClick={handleSubmit}
-                                            disabled={isSubmittingProof || proofUrls.length === 0}
+                                            disabled={isSubmittingProof || proofs.length === 0}
                                             className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 font-black text-lg rounded-2xl shadow-lg shadow-indigo-100"
                                         >
                                             <Send className="mr-2 h-5 w-5" /> SUBMIT FOR FINAL REVIEW
@@ -234,16 +248,33 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                                 Reason for rejection: {job.rejectionReason || 'Photos were not clear or didn\'t show the completed work.'}
                                             </div>
                                             <div className="space-y-4">
-                                                <UploadQueue jobId={job.id} onUploadComplete={setProofUrls} />
+                                                <UploadQueue jobId={job.id} onUploadComplete={setProofs} />
                                                 <Button
                                                     onClick={handleSubmit}
-                                                    disabled={isSubmittingProof || proofUrls.length === 0}
+                                                    disabled={isSubmittingProof || proofs.length === 0}
                                                     variant="destructive"
                                                     className="w-full h-14 font-black text-lg rounded-2xl"
                                                 >
                                                     RESUBMIT WORK PROOF
                                                 </Button>
                                             </div>
+                                        </AlertDescription>
+                                    </div>
+                                </Alert>
+                            )}
+
+                            {job.status === 'CANCELLED' && (
+                                <Alert variant="destructive" className="bg-red-50 border-red-200 p-8 rounded-3xl">
+                                    <AlertCircle className="h-6 w-6" />
+                                    <div className="ml-4">
+                                        <AlertTitle className="text-xl font-black text-red-900 mb-2">
+                                            {job.cancelReason === 'NO_SHOW' ? 'Job Marked as No-Show' : 'Job Cancelled'}
+                                        </AlertTitle>
+                                        <AlertDescription className="text-red-800 font-medium">
+                                            {job.cancelReason === 'NO_SHOW'
+                                                ? "You were marked as a no-show for this job. This affects your reliability score."
+                                                : `This job has been cancelled. Reason: ${job.cancelNote || job.cancelReason || 'N/A'}`
+                                            }
                                         </AlertDescription>
                                     </div>
                                 </Alert>
@@ -291,11 +322,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                     <CardContent className="p-6 pt-0">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-1">
-                                                <p className="text-2xl font-black">{profile.workerProfile.totalJobs}</p>
+                                                <p className="text-2xl font-black">{profile.workerProfile.performance?.totalJobs || 0}</p>
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase">Jobs Done</p>
                                             </div>
                                             <div className="space-y-1">
-                                                <p className="text-2xl font-black text-emerald-400">{profile.workerProfile.rating}</p>
+                                                <p className="text-2xl font-black text-emerald-400">{profile.workerProfile.performance?.rating?.toFixed(1) || '0.0'}</p>
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase">Avg Rating</p>
                                             </div>
                                         </div>
@@ -306,6 +337,48 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                     </CardContent>
                                 </Card>
                             )}
+
+                            {/* New Actions Card */}
+                            <Card className="border-none shadow-sm rounded-3xl overflow-hidden border border-slate-100">
+                                <CardHeader className="bg-slate-50/50">
+                                    <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-500">Security & Disputes</CardTitle>
+                                </CardHeader>
+                                <CardContent className="p-6 space-y-4">
+                                    {job.status === 'ACCEPTED' && (
+                                        <Button
+                                            variant="outline"
+                                            className="w-full border-red-100 text-red-600 hover:bg-red-50 font-bold h-12 rounded-xl"
+                                            onClick={() => {
+                                                if (window.confirm("Warning: Cancelling an accepted job may negatively impact your reliability score and can lead to account suspension. Are you sure you want to proceed?")) {
+                                                    const reason = window.prompt("Please provide a reason for cancellation:");
+                                                    if (reason) cancelJob({ reason: 'OTHER', note: reason });
+                                                }
+                                            }}
+                                            disabled={isCancelling}
+                                        >
+                                            CANCEL JOB
+                                        </Button>
+                                    )}
+
+                                    {['PROOF_SUBMITTED', 'REJECTED', 'APPROVED', 'COMPLETED'].includes(job.status) && (
+                                        <Button
+                                            variant="outline"
+                                            className="w-full border-amber-100 text-amber-600 hover:bg-amber-50 font-bold h-12 rounded-xl"
+                                            onClick={() => {
+                                                const reason = window.prompt("Please state why you are opening a dispute:");
+                                                if (reason) openDispute({ reason });
+                                            }}
+                                            disabled={isOpeningDispute}
+                                        >
+                                            OPEN DISPUTE
+                                        </Button>
+                                    )}
+
+                                    <p className="text-[10px] text-slate-400 font-medium text-center">
+                                        Support team will review all disputes within 24-48 hours.
+                                    </p>
+                                </CardContent>
+                            </Card>
                         </div>
                     </div>
                 </TabsContent>

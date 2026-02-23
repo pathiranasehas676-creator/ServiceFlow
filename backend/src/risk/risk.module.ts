@@ -3,8 +3,8 @@ import { RiskService } from './risk.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-    imports: [PrismaModule],
-    providers: [RiskService],
-    exports: [RiskService],
+  imports: [PrismaModule],
+  providers: [RiskService],
+  exports: [RiskService],
 })
-export class RiskModule { }
+export class RiskModule {}

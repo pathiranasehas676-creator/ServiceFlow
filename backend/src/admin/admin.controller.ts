@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   UseGuards,
   Req,
 } from '@nestjs/common';
@@ -37,12 +38,25 @@ export class AdminController {
     return this.adminService.getApiMetrics();
   }
 
-
   @Get('audit-logs')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'STAFF')
   @Permissions('VIEW_AUDIT_LOGS')
   getAuditLogs() {
     return this.adminService.getAuditLogs();
+  }
+
+  @Get('stats/revenue')
+  @Roles('ADMIN')
+  @Permissions('VIEW_ANALYTICS')
+  getRevenueStats() {
+    return this.adminService.getRevenueStats();
+  }
+
+  @Get('stats/security')
+  @Roles('ADMIN')
+  @Permissions('VIEW_ANALYTICS')
+  getSecurityStats() {
+    return this.adminService.getSecurityStats();
   }
 
   @Post('payouts/:id/approve')
@@ -90,8 +104,55 @@ export class AdminController {
   @Get('verifications')
   @Roles('ADMIN', 'STAFF')
   @Permissions('VERIFY_ID')
-  getVerifications() {
-    return this.adminService.getVerifications();
+  getVerifications(@Query('status') status?: string) {
+    return this.adminService.getVerifications(status);
+  }
+
+  @Post('verifications/id/:id/approve')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('VERIFY_ID')
+  approveVerification(
+    @Param('id') id: string,
+    @Body() body: { notes?: string },
+    @Req() req: any,
+  ) {
+    return this.adminService.approveVerification(id, req.user.id, body.notes);
+  }
+
+  @Post('verifications/id/:id/reject')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('VERIFY_ID')
+  rejectVerification(
+    @Param('id') id: string,
+    @Body() body: { reason: string },
+    @Req() req: any,
+  ) {
+    return this.adminService.rejectVerification(id, req.user.id, body.reason);
+  }
+
+  @Get('verifications/bank')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('VERIFY_ID')
+  getBankVerifications(@Query('status') status?: string) {
+    return this.adminService.getBankVerifications(status);
+  }
+
+  @Post('verifications/bank/:id/approve')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('VERIFY_ID')
+  approveBankDetails(@Param('id') id: string, @Req() req: any) {
+    return this.adminService.approveBankDetails(id, req.user.id);
+  }
+
+  @Post('verifications/bank/:id/reject')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('VERIFY_ID')
+  rejectBankDetails(
+    @Param('id') id: string,
+    @Body() body: { reason: string },
+    @Req() req: any,
+  ) {
+    return this.adminService.rejectBankDetails(id, req.user.id, body.reason);
   }
 
   @Post('verifications/bulk-approve')
@@ -102,10 +163,17 @@ export class AdminController {
   }
 
   @Get('users')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'STAFF')
   @Permissions('MANAGE_USERS')
-  getUsers() {
-    return this.adminService.getUsers();
+  getUsers(@Query('status') status?: string) {
+    return this.adminService.getUsers(status);
+  }
+
+  @Get('users/:id')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('MANAGE_USERS')
+  getUserDetail(@Param('id') id: string) {
+    return this.adminService.getUserDetail(id);
   }
 
   @Post('users/:id/blacklist')
@@ -121,5 +189,68 @@ export class AdminController {
     @Req() req: any,
   ) {
     return this.adminService.blacklistUser(id, req.user.id, body.reason);
+  }
+
+  @Post('users/:id/suspend')
+  @Roles('ADMIN')
+  @Permissions('MANAGE_USERS')
+  @UseGuards(ElevatedGuard)
+  @ApiOperation({ summary: 'Suspend a user (requires re-auth)' })
+  suspendUser(
+    @Param('id') id: string,
+    @Body() body: { reason: string },
+    @Req() req: any,
+  ) {
+    return this.adminService.suspendUser(id, req.user.id, body.reason);
+  }
+
+  @Post('users/:id/unsuspend')
+  @Roles('ADMIN')
+  @Permissions('MANAGE_USERS')
+  @UseGuards(ElevatedGuard)
+  @ApiOperation({ summary: 'Unsuspend a user (requires re-auth)' })
+  unsuspendUser(@Param('id') id: string, @Req() req: any) {
+    return this.adminService.unsuspendUser(id, req.user.id);
+  }
+
+  @Get('users/:id/risk-report')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('VERIFY_ID')
+  getUserRiskReport(@Param('id') id: string) {
+    return this.adminService.getUserRiskReport(id);
+  }
+
+  @Post('verifications/:id/request-reupload')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('VERIFY_ID')
+  requestVerificationReupload(
+    @Param('id') id: string,
+    @Body() body: { reason: string; deadlineHours?: number },
+    @Req() req: any,
+  ) {
+    return this.adminService.requestVerificationReupload(
+      id,
+      req.user.id,
+      body.reason,
+      body.deadlineHours,
+    );
+  }
+
+  @Get('staff/:id/permissions')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Get permissions for a specific staff member' })
+  getStaffPermissions(@Param('id') id: string) {
+    return this.adminService.getStaffPermissions(id);
+  }
+
+  @Post('staff/:id/permissions')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Update permissions for a specific staff member' })
+  updateStaffPermissions(
+    @Param('id') id: string,
+    @Body('permissionCodes') codes: string[],
+    @Req() req: any,
+  ) {
+    return this.adminService.updateStaffPermissions(id, codes, req.user.id);
   }
 }

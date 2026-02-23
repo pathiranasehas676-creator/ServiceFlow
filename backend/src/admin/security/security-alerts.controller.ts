@@ -18,7 +18,7 @@ import { SecurityAlertsService } from './security-alerts.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'STAFF')
 export class SecurityAlertsController {
-  constructor(private alertsService: SecurityAlertsService) { }
+  constructor(private alertsService: SecurityAlertsService) {}
 
   @Get()
   @ApiOperation({ summary: 'Get security alerts' })

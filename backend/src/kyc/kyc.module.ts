@@ -7,9 +7,9 @@ import { RiskModule } from '../risk/risk.module';
 import { CommonModule } from '../common/common.module';
 
 @Module({
-    imports: [PrismaModule, RiskModule, CommonModule],
-    controllers: [KycController],
-    providers: [KycService],
-    exports: [KycService],
+  imports: [PrismaModule, RiskModule, CommonModule],
+  controllers: [KycController],
+  providers: [KycService],
+  exports: [KycService],
 })
-export class KycModule { }
+export class KycModule {}

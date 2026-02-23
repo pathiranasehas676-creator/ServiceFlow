@@ -12,7 +12,7 @@ export class JobPaymentsService {
   constructor(
     private prisma: PrismaService,
     private walletService: WalletService,
-  ) { }
+  ) {}
 
   // Create payment explicitly (e.g. on Proof Approval)
   async createPayment(jobId: string, adminId: string) {

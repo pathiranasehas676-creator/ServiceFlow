@@ -6,6 +6,9 @@ import { AdminTopbar } from '@/components/admin/topbar';
 import { CommandPalette } from '@/components/admin/command-palette';
 import { Toaster } from '@/components/ui/sonner';
 import { MobileAdminSidebar } from '@/components/admin/mobile-sidebar';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function AdminLayout({
     children,
@@ -13,6 +16,28 @@ export default function AdminLayout({
     children: React.ReactNode;
 }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const { user, isLoading, isAuthenticated } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (!isLoading && !isAuthenticated) {
+            router.push('/auth/login');
+        } else if (!isLoading && user && user.role !== 'ADMIN') {
+            router.push('/unauthorized');
+        }
+    }, [isLoading, isAuthenticated, user, router]);
+
+    if (isLoading) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-background">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            </div>
+        );
+    }
+
+    if (!user || user.role !== 'ADMIN') {
+        return null;
+    }
 
     return (
         <div className="flex h-screen bg-background text-foreground">

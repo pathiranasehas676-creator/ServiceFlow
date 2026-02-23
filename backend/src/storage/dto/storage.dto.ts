@@ -24,9 +24,9 @@ class FileUploadDto {
 }
 
 class IdFileUploadDto extends FileUploadDto {
-  @ApiProperty({ enum: ['FRONT', 'BACK'] })
-  @IsEnum(['FRONT', 'BACK'])
-  side: 'FRONT' | 'BACK';
+  @ApiProperty({ enum: ['FRONT', 'BACK', 'SELFIE'] })
+  @IsEnum(['FRONT', 'BACK', 'SELFIE'])
+  side: 'FRONT' | 'BACK' | 'SELFIE';
 }
 
 class UploadConfirmationDto {
@@ -44,9 +44,9 @@ class UploadConfirmationDto {
 }
 
 class IdUploadConfirmationDto extends UploadConfirmationDto {
-  @ApiProperty({ enum: ['FRONT', 'BACK'] })
-  @IsEnum(['FRONT', 'BACK'])
-  side: 'FRONT' | 'BACK';
+  @ApiProperty({ enum: ['FRONT', 'BACK', 'SELFIE'] })
+  @IsEnum(['FRONT', 'BACK', 'SELFIE'])
+  side: 'FRONT' | 'BACK' | 'SELFIE';
 }
 
 // ============================================

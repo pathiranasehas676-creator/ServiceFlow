@@ -1,298 +1,295 @@
-"use client";
+'use client';
 
-import { useWorkerWallet } from "@/lib/hooks/useWorkerWallet";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-    Table,
-    TableHeader,
-    TableRow,
-    TableHead,
-    TableBody,
-    TableCell
-} from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import {
-    Dialog,
-    DialogContent,
-    DialogTrigger,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-    DialogFooter
-} from "@/components/ui/dialog";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useState } from "react";
-import { Loader2, ArrowLeft, ArrowRight, Download } from "lucide-react";
-import { toast } from "sonner";
-import { PayoutRequest } from "@/types/wallet";
+import * as React from 'react';
+import { Card, CardHeader, CardContent, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
+import { DollarSign, AlertCircle, Clock, CheckCircle, ShieldCheck } from 'lucide-react';
+import { api } from '@/lib/apiClient';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
-export default function WalletPage() {
-    const { wallet, transactions, payouts, loading, requestPayout, fetchTransactions } = useWorkerWallet();
-    const [requestOpen, setRequestOpen] = useState(false);
-    const [amount, setAmount] = useState("");
-    const [payoutType, setPayoutType] = useState<'WEEKLY' | 'SPECIAL'>('SPECIAL');
-    const [page, setPage] = useState(1);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+interface Wallet {
+    availableBalanceCents: number;
+    pendingBalanceCents: number;
+    totalEarnedCents: number;
+    currency: string;
+}
 
-    const handlePageChange = (newPage: number) => {
-        if (!transactions) return;
-        if (newPage > 0 && newPage <= transactions.meta.lastPage) {
-            setPage(newPage);
-            fetchTransactions(newPage);
+interface Transaction {
+    id: string;
+    type: string;
+    amountCents: number;
+    description: string;
+    createdAt: string;
+    status: string;
+}
+
+export default function WorkerWalletPage() {
+    const queryClient = useQueryClient();
+    const [payoutAmount, setPayoutAmount] = React.useState('');
+
+    const { data: wallet, isLoading: isWalletLoading } = useQuery<Wallet>({
+        queryKey: ['wallet', 'my'],
+        queryFn: async () => await api.get('/wallet/my'),
+    });
+
+    const { data: transactions, isLoading: isTransactionsLoading } = useQuery<{ data: Transaction[] }>({
+        queryKey: ['wallet', 'transactions'],
+        queryFn: async () => await api.get('/wallet/transactions'),
+    });
+
+    const { data: integrity } = useQuery<{ walletValid: boolean }>({
+        queryKey: ['wallet', 'integrity'],
+        queryFn: async () => await api.get('/wallet/integrity'),
+    });
+
+    const { data: payouts, isLoading: isPayoutsLoading } = useQuery<any[]>({
+        queryKey: ['payouts', 'history'],
+        queryFn: async () => await api.get('/payouts/my-history'),
+    });
+
+    const requestPayout = useMutation({
+        mutationFn: async (amount: number) => {
+            await api.post('/payouts/request', { amountCents: amount });
+        },
+        onSuccess: () => {
+            toast.success('Payout request submitted!');
+            setPayoutAmount('');
+            queryClient.invalidateQueries({ queryKey: ['wallet'] });
+            queryClient.invalidateQueries({ queryKey: ['payouts'] });
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || 'Failed to request payout');
         }
+    });
+
+    const { data: stripeStatus } = useQuery({
+        queryKey: ['stripe', 'status'],
+        queryFn: async () => await api.get('/payments/worker/status'),
+    });
+
+    const onboardMutation = useMutation({
+        mutationFn: async () => {
+            const { url } = await api.post('/payments/worker/onboard');
+            window.location.href = url;
+        },
+    });
+
+    const handleRequestPayout = () => {
+        const amount = parseFloat(payoutAmount) * 100;
+        if (isNaN(amount) || amount <= 0) {
+            toast.error('Please enter a valid amount');
+            return;
+        }
+        if (amount < 1000) { // $10 min
+            toast.error('Minimum payout amount is $10.00');
+            return;
+        }
+        if (wallet && amount > wallet.availableBalanceCents) {
+            toast.error('Insufficient available balance');
+            return;
+        }
+        requestPayout.mutate(amount);
     };
 
-    const handleRequest = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const amt = parseFloat(amount);
-        if (isNaN(amt) || amt <= 0) return toast.error("Invalid amount");
-
-        const cents = Math.round(amt * 100);
-        if (cents < 500) return toast.error("Minimum payout is $5.00");
-        if (cents > (wallet?.availableBalanceCents || 0)) return toast.error("Insufficient balance");
-
-        setIsSubmitting(true);
-        try {
-            await requestPayout(cents, payoutType);
-            setRequestOpen(false);
-            setAmount("");
-            setPayoutType('SPECIAL');
-            toast.success("Payout requested successfully");
-        } catch (err) {
-            toast.error("Failed to request payout");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    if (loading && !wallet) return <div className="flex justify-center items-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
+    if (isWalletLoading) return <div className="p-8">Loading wallet...</div>;
 
     const available = (wallet?.availableBalanceCents || 0) / 100;
     const pending = (wallet?.pendingBalanceCents || 0) / 100;
-    const totalEarned = (wallet?.totalEarnedCents || 0) / 100;
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'APPROVED': return 'default'; // blue/primary
-            case 'PAID': return 'secondary'; // gray/green depending on theme? Or strictly 'success' if available
-            case 'REJECTED': return 'destructive';
-            default: return 'outline'; // Pending
-        }
-    };
 
     return (
-        <div className="container mx-auto p-6 space-y-8 max-w-5xl">
-            <div className="flex justify-between items-center flex-wrap gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">My Wallet</h1>
-                    <p className="text-muted-foreground">Manage your earnings and payouts</p>
-                </div>
+        <div className="container py-8 space-y-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <h1 className="text-3xl font-black tracking-tight">Financial Hub</h1>
+                {integrity?.walletValid === true ? (
+                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 px-4 py-1.5 rounded-xl flex items-center gap-2 hover:bg-emerald-100 transition-colors cursor-default">
+                        <ShieldCheck className="h-4 w-4" />
+                        <span className="font-bold uppercase tracking-tight text-[10px]">Data Integrity Verified (HMAC-SHA256)</span>
+                    </Badge>
+                ) : integrity?.walletValid === false ? (
+                    <Badge variant="destructive" className="px-4 py-1.5 rounded-xl flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <span className="font-bold uppercase tracking-tight text-[10px]">Security Alert: Integrity Mismatch</span>
+                    </Badge>
+                ) : null}
+            </div>
 
-                <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
-                    <DialogTrigger asChild>
-                        <Button disabled={available < 5}>Request Payout</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <form onSubmit={handleRequest}>
-                            <DialogHeader>
-                                <DialogTitle>Request Payout</DialogTitle>
-                                <DialogDescription>
-                                    Minimum payout is $5.00. Available: {formatCurrency(available)}
-                                </DialogDescription>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="type">Payout Type</Label>
-                                    <Select value={payoutType} onValueChange={(v: any) => setPayoutType(v)}>
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="SPECIAL">Special (On Demand)</SelectItem>
-                                            <SelectItem value="WEEKLY">Weekly Settlement</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="amount">Amount (USD)</Label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                                        <Input
-                                            id="amount"
-                                            type="number"
-                                            min="5.00"
-                                            step="0.01"
-                                            max={available}
-                                            value={amount}
-                                            onChange={(e) => setAmount(e.target.value)}
-                                            className="pl-7"
-                                            placeholder="0.00"
-                                            required
-                                        />
-                                    </div>
+            <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <DollarSign className="h-5 w-5 text-green-600" /> Available Balance
+                        </CardTitle>
+                        <CardDescription>Funds ready for payout</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-4xl font-bold">${available.toFixed(2)}</div>
+                    </CardContent>
+                    <CardFooter className="flex gap-2">
+                        <div className="flex-1">
+                            <input
+                                type="number"
+                                placeholder="Amount to withdraw"
+                                className="w-full border p-2 rounded-md"
+                                value={payoutAmount}
+                                onChange={(e) => setPayoutAmount(e.target.value)}
+                            />
+                        </div>
+                        <Button
+                            onClick={handleRequestPayout}
+                            disabled={!available || requestPayout.isPending}
+                        >
+                            {requestPayout.isPending ? 'Processing...' : 'Request Payout'}
+                        </Button>
+                    </CardFooter>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Clock className="h-5 w-5 text-amber-600" /> Pending Balance
+                        </CardTitle>
+                        <CardDescription>Funds held for active jobs or payouts</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-4xl font-bold text-slate-500">${pending.toFixed(2)}</div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Stripe Onboarding Section */}
+            {!stripeStatus?.payoutsEnabled && (
+                <Card className="border-indigo-100 bg-indigo-50/30">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-indigo-900">
+                            <ShieldCheck className="h-5 w-5 text-indigo-600" />
+                            Secure Automatic Payouts
+                        </CardTitle>
+                        <CardDescription>
+                            Connect your Stripe account to receive instant payouts to your bank account.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="p-3 bg-white rounded-lg border border-indigo-50">
+                                <h4 className="text-xs font-black text-indigo-600 uppercase mb-1">Status</h4>
+                                <div className="flex items-center gap-2">
+                                    <Badge variant={stripeStatus?.connected ? "secondary" : "outline"}>
+                                        {stripeStatus?.connected ? 'Linked' : 'Not Linked'}
+                                    </Badge>
                                 </div>
                             </div>
-                            <DialogFooter>
-                                <Button type="submit" disabled={isSubmitting}>
-                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                    Submit Request
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    </DialogContent>
-                </Dialog>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid sm:grid-cols-3 gap-6">
-                <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Available Balance</CardTitle></CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">{formatCurrency(available)}</div>
+                            <div className="p-3 bg-white rounded-lg border border-indigo-50">
+                                <h4 className="text-xs font-black text-indigo-600 uppercase mb-1">Requirements</h4>
+                                <div className="flex items-center gap-2">
+                                    <Badge variant={stripeStatus?.detailsSubmitted ? "secondary" : "outline"}>
+                                        {stripeStatus?.detailsSubmitted ? 'Identity Verified' : 'Action Required'}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-indigo-50">
+                                <h4 className="text-xs font-black text-indigo-600 uppercase mb-1">Payouts</h4>
+                                <div className="flex items-center gap-2">
+                                    <Badge variant={stripeStatus?.payoutsEnabled ? "secondary" : "outline"}>
+                                        {stripeStatus?.payoutsEnabled ? 'Enabled' : 'Disabled'}
+                                    </Badge>
+                                </div>
+                            </div>
+                        </div>
                     </CardContent>
+                    <CardFooter>
+                        <Button
+                            className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700"
+                            onClick={() => onboardMutation.mutate()}
+                            disabled={onboardMutation.isPending}
+                        >
+                            {onboardMutation.isPending ? 'Redirecting...' : stripeStatus?.connected ? 'Complete Onboarding' : 'Set Up Stripe Payouts'}
+                        </Button>
+                    </CardFooter>
                 </Card>
-                <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pending Payouts</CardTitle></CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">{formatCurrency(pending)}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Earned</CardTitle></CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">{formatCurrency(totalEarned)}</div>
-                    </CardContent>
-                </Card>
-            </div>
+            )}
 
-            <Tabs defaultValue="transactions" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
-                    <TabsTrigger value="transactions">Transactions</TabsTrigger>
-                    <TabsTrigger value="payouts">Payout History</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="transactions" className="mt-6">
-                    <Card>
+            <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Payout History</CardTitle>
+                    </CardHeader>
+                    <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Date</TableHead>
-                                    <TableHead>Type</TableHead>
-                                    <TableHead>Description</TableHead>
+                                    <TableHead>Amount</TableHead>
+                                    <TableHead>Status</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {isPayoutsLoading ? (
+                                    <TableRow><TableCell colSpan={3}>Loading...</TableCell></TableRow>
+                                ) : (payouts as any)?.data?.length === 0 ? (
+                                    <TableRow><TableCell colSpan={3} className="text-muted-foreground text-center">No payouts yet.</TableCell></TableRow>
+                                ) : (
+                                    (payouts as any)?.data?.map((p: any) => (
+                                        <TableRow key={p.id}>
+                                            <TableCell>{new Date(p.createdAt).toLocaleDateString()}</TableCell>
+                                            <TableCell>${(p.amountCents / 100).toFixed(2)}</TableCell>
+                                            <TableCell>
+                                                <Badge
+                                                    variant={
+                                                        p.status === 'PAID' ? 'default' :
+                                                            p.status === 'PENDING' ? 'outline' :
+                                                                p.status === 'REJECTED' ? 'destructive' : 'secondary'
+                                                    }
+                                                >
+                                                    {p.status}
+                                                </Badge>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Recent Transactions</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Desc</TableHead>
                                     <TableHead className="text-right">Amount</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {transactions?.data.map((tx) => (
-                                    <TableRow key={tx.id}>
-                                        <TableCell className="font-medium whitespace-nowrap">{formatDateTime(tx.createdAt)}</TableCell>
-                                        <TableCell>
-                                            <Badge variant={tx.type === 'CREDIT' ? 'default' : tx.type === 'DEBIT' && tx.status === 'PENDING' ? 'outline' : 'secondary'}>
-                                                {tx.type}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="max-w-[200px] truncate" title={tx.description}>{tx.description}</TableCell>
-                                        <TableCell className={`text-right font-mono font-medium ${tx.type === 'CREDIT' ? 'text-green-600' : 'text-zinc-600'}`}>
-                                            {tx.type === 'CREDIT' ? '+' : '-'}{formatCurrency(tx.amountCents / 100)}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                                {!transactions?.data.length && !loading && (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                                            No transactions yet.
-                                        </TableCell>
-                                    </TableRow>
+                                {isTransactionsLoading ? (
+                                    <TableRow><TableCell colSpan={2}>Loading...</TableCell></TableRow>
+                                ) : transactions?.data?.length === 0 ? (
+                                    <TableRow><TableCell colSpan={2} className="text-muted-foreground text-center">No transactions.</TableCell></TableRow>
+                                ) : (
+                                    transactions?.data?.map((tx) => (
+                                        <TableRow key={tx.id}>
+                                            <TableCell>
+                                                <div className="font-medium">{tx.description}</div>
+                                                <div className="text-xs text-muted-foreground">{new Date(tx.createdAt).toLocaleDateString()}</div>
+                                            </TableCell>
+                                            <TableCell className={`text-right font-medium ${['CREDIT', 'RELEASE'].includes(tx.type) ? 'text-green-600' : 'text-red-600'
+                                                }`}>
+                                                {['CREDIT', 'RELEASE'].includes(tx.type) ? '+' : '-'}${(tx.amountCents / 100).toFixed(2)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
                                 )}
                             </TableBody>
                         </Table>
-
-                        {/* Pagination */}
-                        {transactions && transactions.meta.lastPage > 1 && (
-                            <div className="flex items-center justify-end space-x-2 p-4 border-t">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handlePageChange(page - 1)}
-                                    disabled={page <= 1}
-                                >
-                                    <ArrowLeft className="h-4 w-4" />
-                                </Button>
-                                <div className="text-sm font-medium px-2">
-                                    Page {page} of {transactions.meta.lastPage}
-                                </div>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handlePageChange(page + 1)}
-                                    disabled={page >= transactions.meta.lastPage}
-                                >
-                                    <ArrowRight className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        )}
-                    </Card>
-                </TabsContent>
-
-                <TabsContent value="payouts" className="mt-6">
-                    <Card>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Request Date</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Amount</TableHead>
-                                    <TableHead>Rejection Reason</TableHead>
-                                    <TableHead className="text-right">Receipt</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {payouts.map((payout: PayoutRequest) => (
-                                    <TableRow key={payout.id}>
-                                        <TableCell className="whitespace-nowrap">{formatDateTime(payout.createdAt)}</TableCell>
-                                        <TableCell>
-                                            <Badge variant={getStatusColor(payout.status) as any}>
-                                                {payout.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="font-mono">{formatCurrency(payout.amountCents / 100)}</TableCell>
-                                        <TableCell className="text-sm text-muted-foreground">{payout.rejectionReason || '-'}</TableCell>
-                                        <TableCell className="text-right">
-                                            {payout.status === 'PAID' && payout.transactionRef?.startsWith('http') ? (
-                                                <a href={payout.transactionRef} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-blue-600 hover:underline">
-                                                    <Download className="mr-1 h-3 w-3" /> Receipt
-                                                </a>
-                                            ) : payout.status === 'PAID' ? (
-                                                <span className="text-muted-foreground text-xs" title={payout.transactionRef}>Ref: {payout.transactionRef?.substring(0, 8)}...</span>
-                                            ) : (
-                                                '-'
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                                {!payouts.length && !loading && (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                            No payout requests.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </Card>
-                </TabsContent>
-            </Tabs>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
-    )
+    );
 }

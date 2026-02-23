@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class SystemService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async getHealth() {
     const db = await this.checkDb();
@@ -45,10 +45,13 @@ export class SystemService {
   async getConfigs() {
     const configs = await this.prisma.systemConfig.findMany();
     // Convert array to object { key: value }
-    return configs.reduce((acc, curr) => {
-      acc[curr.key] = curr.value;
-      return acc;
-    }, {} as Record<string, any>);
+    return configs.reduce(
+      (acc, curr) => {
+        acc[curr.key] = curr.value;
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
   }
 
   async updateConfig(key: string, value: any, adminId: string) {

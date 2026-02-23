@@ -34,7 +34,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private csrfService: CsrfService,
-  ) { }
+  ) {}
 
   @Get('csrf')
   @ApiOperation({ summary: 'Get CSRF Token' })
@@ -144,8 +144,15 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get current user info' })
-  getMe(@Req() req: any) {
-    return req.user;
+  async getMe(@Req() req: any) {
+    const permissions = await this.authService.getUserPermissions(
+      req.user.id,
+      req.user.role,
+    );
+    return {
+      ...req.user,
+      permissions,
+    };
   }
 
   @UseGuards(JwtAuthGuard, CsrfGuard)

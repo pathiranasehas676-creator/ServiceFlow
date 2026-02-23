@@ -10,6 +10,9 @@ const statusConfig: Record<JobStatus, { label: string; className: string }> = {
     APPROVED: { label: 'Approved', className: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
     COMPLETED: { label: 'Completed', className: 'bg-slate-50 text-slate-600 border-slate-200' },
     REJECTED: { label: 'Rejected', className: 'bg-red-50 text-red-600 border-red-200' },
+    CANCELLED: { label: 'Cancelled', className: 'bg-gray-50 text-gray-500 border-gray-200' },
+    PENDING_PAYMENT: { label: 'Pending Payment', className: 'bg-orange-50 text-orange-600 border-orange-200' },
+    PENDING_CUSTOMER_CONFIRMATION: { label: 'Awaiting Confirmation', className: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
 };
 
 export function StatusBadge({ status }: { status: JobStatus }) {

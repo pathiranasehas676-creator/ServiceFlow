@@ -25,3 +25,6 @@ if (process.env.DATABASE_URL) {
     process.env.JWT_REFRESH_SECRET = "test-refresh-secret";
     process.env.COOKIE_SECRET = "test-cookie-secret";
 }
+
+// Ensure email provider is console for tests even if .env is loaded
+process.env.EMAIL_PROVIDER = "console";

@@ -11,7 +11,7 @@ import { SystemService } from './system.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class SystemController {
-  constructor(private systemService: SystemService) { }
+  constructor(private systemService: SystemService) {}
 
   @Get('health')
   @ApiOperation({ summary: 'Get system health' })

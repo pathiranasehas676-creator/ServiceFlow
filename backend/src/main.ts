@@ -1,24 +1,32 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import helmet from 'helmet';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SecurityFirewallInterceptor } from './common/interceptors/security-firewall.interceptor';
 
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Security
   app.use(helmet());
-  app.use(cookieParser(process.env.COOKIE_SECRET || 'default-secret-change-me'));
+  app.use(
+    cookieParser(process.env.COOKIE_SECRET || 'default-secret-change-me'),
+  );
 
   const origin = process.env.CORS_ORIGIN || 'http://localhost:3000';
   app.enableCors({
-    origin: origin.split(',').map(s => s.trim()),
+    origin: origin.split(',').map((s) => s.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-CSRF-Token',
+    ],
   });
 
   // Global Validation
@@ -27,8 +35,18 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: true,
+      exceptionFactory: (errors) => {
+        const result = errors.map((error) => ({
+          property: error.property,
+          message: error.constraints ? Object.values(error.constraints)[0] : 'Validation failed',
+        }));
+        console.error('Validation Errors:', result);
+        return new BadRequestException(result);
+      },
     }),
   );
+
+  app.useGlobalInterceptors(new SecurityFirewallInterceptor());
 
   // Request Logging Middleware
   let requestCount = 0;
@@ -40,7 +58,9 @@ async function bootstrap() {
     res.on('finish', () => {
       const duration = Date.now() - start;
       const { statusCode } = res;
-      console.log(`[${requestCount}] ${method} ${originalUrl} - ${statusCode} (${duration}ms)`);
+      console.log(
+        `[${requestCount}] ${method} ${originalUrl} - ${statusCode} (${duration}ms)`,
+      );
     });
 
     next();

@@ -11,7 +11,8 @@ export function useMyJobs(status?: string) {
     const myJobsQuery = useQuery<Job[]>({
         queryKey: ['jobs', 'my', status],
         queryFn: async () => {
-            return await api.get('/jobs/my', { params: { status } });
+            const response = await api.get<{ data: Job[] }>('/jobs/my', { params: { status } });
+            return response.data || [];
         },
     });
 
@@ -35,12 +36,26 @@ export function useJobDetail(jobId: string) {
     });
 
     const arrivedMutation = useMutation({
-        mutationFn: async (coords: { lat: number; lng: number }) => {
-            return await api.post(`/jobs/${jobId}/arrived`, coords);
+        mutationFn: async (params: { lat: number; lng: number; accuracyMeters?: number; isMock?: boolean }) => {
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                if (!profile?.id) throw new Error("Authentication required to queue actions");
+                await queueService.enqueue({
+                    type: 'JOB_ARRIVE' as any,
+                    userId: profile.id,
+                    payload: { jobId, ...params },
+                    dedupeKey: `arrive:${jobId}`
+                });
+                return { offline: true };
+            }
+            return await api.post(`/jobs/${jobId}/arrive`, params);
         },
-        onSuccess: () => {
+        onSuccess: (data: any) => {
             queryClient.invalidateQueries({ queryKey: ['jobs', 'detail', jobId] });
-            toast.success("Arrival marked successfully!");
+            if (data?.offline) {
+                toast.info("Arrival marked offline. It will sync when signal returns.");
+            } else {
+                toast.success("Arrival marked successfully!");
+            }
         },
         onError: (error: any) => {
             const message = error.response?.data?.message || 'Failed to mark arrival';
@@ -49,19 +64,19 @@ export function useJobDetail(jobId: string) {
     });
 
     const submitProofMutation = useMutation({
-        mutationFn: async (proofUrls: string[]) => {
+        mutationFn: async (proofs: any[]) => {
             if (typeof navigator !== 'undefined' && !navigator.onLine) {
                 if (!profile?.id) throw new Error("Authentication required to queue actions");
 
                 await queueService.enqueue({
                     type: 'PROOF_SUBMIT',
                     userId: profile.id,
-                    payload: { jobId, proofs: proofUrls },
+                    payload: { jobId, proofs },
                     dedupeKey: `proofSubmit:${jobId}`
                 });
                 return { offline: true };
             }
-            return await api.post(`/jobs/${jobId}/proof/submit`, { proofUrls });
+            return await api.post(`/jobs/${jobId}/proof/submit`, { proofs });
         },
         onSuccess: (data: any) => {
             queryClient.invalidateQueries({ queryKey: ['jobs', 'detail', jobId] });
@@ -72,8 +87,34 @@ export function useJobDetail(jobId: string) {
             }
         },
         onError: (err: any) => {
-            toast.error(err.message || "Failed to submit work proof");
+            toast.error(err.response?.data?.message || "Failed to submit work proof");
         },
+    });
+
+    const cancelMutation = useMutation({
+        mutationFn: async (data: { reason: string; note?: string }) => {
+            return await api.post(`/jobs/${jobId}/cancel`, data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['jobs', 'detail', jobId] });
+            toast.success("Job cancelled successfully");
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || "Failed to cancel job");
+        }
+    });
+
+    const disputeMutation = useMutation({
+        mutationFn: async (data: { reason: string; attachments?: any[] }) => {
+            return await api.post(`/jobs/${jobId}/disputes`, data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['jobs', 'detail', jobId] });
+            toast.success("Dispute opened successfully");
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.message || "Failed to open dispute");
+        }
     });
 
     return {
@@ -83,5 +124,9 @@ export function useJobDetail(jobId: string) {
         isMarkingArrived: arrivedMutation.isPending,
         submitProof: submitProofMutation.mutate,
         isSubmittingProof: submitProofMutation.isPending,
+        cancelJob: cancelMutation.mutate,
+        isCancelling: cancelMutation.isPending,
+        openDispute: disputeMutation.mutate,
+        isOpeningDispute: disputeMutation.isPending,
     };
 }

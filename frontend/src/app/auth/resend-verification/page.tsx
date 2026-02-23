@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import axios from 'axios';
+import { api, ApiError } from '@/lib/apiClient';
 import Link from 'next/link';
 
 export default function ResendVerificationPage() {
@@ -15,13 +15,12 @@ export default function ResendVerificationPage() {
         setMessage('');
 
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-            await axios.post(`${API_URL}/auth/resend-verification`, { email });
+            await api.post('/auth/resend-verification', { email });
             setStatus('success');
             setMessage(`If an account exists for ${email}, a verification email has been sent to your inbox.`);
         } catch (err: any) {
-            // Even on error, show success message to prevent enumeration (or handle specifically if rate limited)
-            if (err.response?.status === 429) {
+            // Even on error, show success message to prevent enumeration (or handle specifically if rate limited/429)
+            if (err instanceof ApiError && err.status === 429) {
                 setStatus('error');
                 setMessage('Too many requests. Please try again later.');
             } else {

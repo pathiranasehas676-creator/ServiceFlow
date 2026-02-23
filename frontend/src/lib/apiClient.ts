@@ -2,7 +2,11 @@
  * API Client with automatic token refresh on 401
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
+    ? (process.env.NEXT_PUBLIC_API_URL.endsWith('/api/v1')
+        ? process.env.NEXT_PUBLIC_API_URL
+        : `${process.env.NEXT_PUBLIC_API_URL}/api/v1`)
+    : 'http://localhost:3001/api/v1';
 
 export class ApiError extends Error {
     constructor(
@@ -81,7 +85,7 @@ export async function apiClient<T = any>(
 ): Promise<T> {
     const { skipAuth, params, ...fetchOptions } = options;
 
-    let requestUrl = `${API_BASE_URL}${endpoint}`;
+    let requestUrl = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
     if (params) {
         const searchParams = new URLSearchParams();
         Object.entries(params).forEach(([key, value]) => {

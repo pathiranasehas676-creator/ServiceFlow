@@ -167,7 +167,7 @@ export function ImageGallery({
                             <p className="font-medium">
                                 {currentMetadata.mimeType?.split('/')[1]?.toUpperCase() ||
                                     currentSignedData && 'mimeType' in currentSignedData
-                                    ? currentSignedData.mimeType?.split('/')[1]?.toUpperCase()
+                                    ? currentSignedData?.mimeType?.split('/')[1]?.toUpperCase()
                                     : 'Unknown'}
                             </p>
                         </div>
@@ -177,7 +177,7 @@ export function ImageGallery({
                                 {currentMetadata.sizeBytes
                                     ? formatFileSize(currentMetadata.sizeBytes)
                                     : currentSignedData && 'sizeBytes' in currentSignedData
-                                        ? formatFileSize(currentSignedData.sizeBytes)
+                                        ? formatFileSize(currentSignedData?.sizeBytes || 0)
                                         : 'Unknown'}
                             </p>
                         </div>
@@ -203,8 +203,8 @@ export function ImageGallery({
                                     setImageError(false);
                                 }}
                                 className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${index === currentIndex
-                                        ? 'border-blue-500 ring-2 ring-blue-200'
-                                        : 'border-gray-200 hover:border-gray-300'
+                                    ? 'border-blue-500 ring-2 ring-blue-200'
+                                    : 'border-gray-200 hover:border-gray-300'
                                     }`}
                             >
                                 {signedUrls?.[index] && 'getUrl' in signedUrls[index] ? (

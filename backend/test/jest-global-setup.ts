@@ -21,7 +21,7 @@ export default async () => {
     console.log('\nSyncing test schema (test_e2e)...');
     try {
         // Use db push to ensure schema matches prisma file
-        execSync('npx prisma db push --skip-generate', {
+        execSync('npx prisma db push --force-reset --skip-generate', {
             env: { ...process.env },
             stdio: 'inherit'
         });

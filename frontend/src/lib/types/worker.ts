@@ -1,24 +1,49 @@
-export type JobStatus = 'POSTED' | 'ACCEPTED' | 'ARRIVED' | 'PROOF_SUBMITTED' | 'APPROVED' | 'COMPLETED' | 'REJECTED';
+export type JobStatus = 'POSTED' | 'ACCEPTED' | 'ARRIVED' | 'PROOF_SUBMITTED' | 'APPROVED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED' | 'PENDING_PAYMENT' | 'PENDING_CUSTOMER_CONFIRMATION';
 
 export interface WorkerProfile {
     id: string;
     fullName: string;
     email: string;
-    phone?: string;
-    address?: string;
-    isOnline: boolean;
-    bankDetails?: {
-        accountHolder: string;
-        bankName: string;
-        accountNumber: string;
-        ifscCode: string;
-    };
-    idVerificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'NONE';
-    profilePicture?: string;
+    phoneNumber?: string;
+    role: string;
+    status: 'ACTIVE' | 'SUSPENDED' | 'BLACKLISTED';
+    verificationScore: number;
+    verificationLevel: number;
+    riskFlags: string[];
+    wallet?: Wallet;
     workerProfile?: {
-        totalJobs: number;
-        rating: number;
-        skills: string[];
+        id: string;
+        fullName?: string;
+        nicNumber?: string;
+        documentType?: string;
+        address?: string;
+        bio?: string;
+        skills?: string[];
+        hourlyRateCents?: number;
+        profilePhotoFileKey?: string;
+        verificationStatus: 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
+        rejectionReason?: string;
+        adminNotes?: string;
+        profileCompleted: boolean;
+        completionScore: number;
+        missingProfileItems?: any;
+        lastComputedAt?: string;
+        isOnline: boolean;
+        bankDetails?: {
+            id: string;
+            bankName: string;
+            accountName: string;
+            accountNumberLast4: string;
+            isVerified: boolean;
+        };
+        performance?: {
+            totalJobs: number;
+            rating: number;
+            onTimeArrivals: number;
+            cancellationCount: number;
+            noShowCount: number;
+            reliabilityScore: number;
+        };
     };
 }
 
@@ -27,21 +52,31 @@ export interface Job {
     title: string;
     description: string;
     serviceId: string;
+    service?: { name: string; category?: string };
     district: string;
     location: string;
+    address?: string;
     lat?: number;
     lng?: number;
     budget: number;
+    priceCents: number;
     status: JobStatus;
     postedAt: string;
+    executionDate?: string;
     acceptedAt?: string;
     arrivedAt?: string;
     arrivedLatitude?: number;
     arrivedLongitude?: number;
     arrivalDistanceMeters?: number;
+    arrivalIp?: string;
     completedAt?: string;
     proofUrls?: string[];
+    proofs?: { id: string; imageUrl?: string; fileSizeBytes: number; uploadedAt: string }[];
     rejectionReason?: string;
+    cancelReason?: string;
+    cancelNote?: string;
+    workerId?: string;
+    worker?: { user: { fullName: string; email: string } };
 }
 
 export interface Wallet {

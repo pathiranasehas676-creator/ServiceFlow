@@ -8,6 +8,9 @@ async function main() {
   console.log('🌱 Starting database seed...');
 
   // Clean existing data (in development only!)
+  await (prisma as any).userPermission.deleteMany();
+  await (prisma as any).rolePermission.deleteMany();
+  await (prisma as any).permission.deleteMany();
   await prisma.adminAuditLog.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.ticketMessage.deleteMany();
@@ -29,6 +32,85 @@ async function main() {
 
   console.log('✅ Cleaned existing data');
 
+  // ============================================
+  // 0. SEED PERMISSIONS
+  // ============================================
+
+  const permissionsData = [
+    // JOBS
+    { code: 'CREATE_JOBS', name: 'Create Jobs', group: 'Jobs', description: 'Can create and post new jobs' },
+    { code: 'VIEW_ALL_JOBS', name: 'View All Jobs', group: 'Jobs', description: 'Can see all jobs in the system' },
+    { code: 'ASSIGN_JOBS', name: 'Assign Jobs', group: 'Jobs', description: 'Can assign or reassign workers to jobs' },
+    { code: 'CANCEL_JOBS', name: 'Cancel Jobs', group: 'Jobs', description: 'Can cancel active jobs' },
+    { code: 'DECIDE_PROOFS', name: 'Decide Proofs', group: 'Jobs', description: 'Can approve or reject work proofs' },
+    { code: 'VIEW_JOB_ANALYTICS', name: 'Job Analytics', group: 'Jobs', description: 'Can view high-level job performance data' },
+
+    // WORKERS / USERS
+    { code: 'VIEW_USERS', name: 'View Users', group: 'Users', description: 'Can view user list and details' },
+    { code: 'EDIT_USERS', name: 'Edit Users', group: 'Users', description: 'Can modify user profiles and settings' },
+    { code: 'BLACKLIST_USERS', name: 'Blacklist Users', group: 'Users', description: 'Can suspend or block users' },
+    { code: 'VERIFY_WORKERS', name: 'Verify Workers', group: 'Users', description: 'Can approve ID and Bank verifications' },
+    { code: 'VIEW_WORKER_PROFILES', name: 'View Worker Profiles', group: 'Users', description: 'Can see sensitive worker data' },
+
+    // FINANCE
+    { code: 'VIEW_FINANCE_DASHBOARD', name: 'Finance Dashboard', group: 'Finance', description: 'Can view revenue and payout summaries' },
+    { code: 'VIEW_WALLETS', name: 'View Wallets', group: 'Finance', description: 'Can view user wallet balances' },
+    { code: 'ADJUST_WALLETS', name: 'Adjust Wallets', group: 'Finance', description: 'Can manually credit or debit wallets' },
+    { code: 'VIEW_TRANSACTIONS', name: 'View Transactions', group: 'Finance', description: 'Can see all system ledger entries' },
+    { code: 'PROCESS_PAYOUTS', name: 'Process Payouts', group: 'Finance', description: 'Can approve and mark payouts as paid' },
+    { code: 'VIEW_BANK_DETAILS', name: 'View Bank Details', group: 'Finance', description: 'Can view unmasked worker bank info' },
+
+    // SUPPORT
+    { code: 'VIEW_TICKETS', name: 'View Tickets', group: 'Support', description: 'Can view support tickets' },
+    { code: 'REPLY_TICKETS', name: 'Reply Tickets', group: 'Support', description: 'Can reply to support tickets' },
+    { code: 'CLOSE_TICKETS', name: 'Close Tickets', group: 'Support', description: 'Can resolve or close tickets' },
+
+    // SYSTEM
+    { code: 'MANAGE_SERVICES', name: 'Manage Services', group: 'System', description: 'Can create/edit job categories and prices' },
+    { code: 'MANAGE_SETTINGS', name: 'Manage Settings', group: 'System', description: 'Can change global system variables' },
+    { code: 'VIEW_AUDIT_LOGS', name: 'View Audit Logs', group: 'System', description: 'Can view administrative action logs' },
+    { code: 'MANAGE_ROLES_PERMISSIONS', name: 'Manage Roles/Permissions', group: 'System', description: 'Can edit permissions for roles and users' },
+
+    // REQUESTS INBOX
+    { code: 'VIEW_REQUESTS', name: 'View Requests', group: 'Requests', description: 'Can see the requests inbox' },
+    { code: 'PROCESS_REQUESTS', name: 'Process Requests', group: 'Requests', description: 'Can act on proofs, payouts, and verifications' },
+  ];
+
+  const createdPermissions = [];
+  for (const p of permissionsData) {
+    const perm = await (prisma as any).permission.create({
+      data: p,
+    });
+    createdPermissions.push(perm);
+  }
+
+  // ADMIN gets all permissions
+  for (const perm of createdPermissions) {
+    await (prisma as any).rolePermission.create({
+      data: {
+        role: UserRole.ADMIN,
+        permissionId: perm.id,
+      },
+    });
+  }
+
+
+
+  // STAFF gets limited operational access
+  const staffAllowed = ['VIEW_ALL_JOBS', 'CREATE_JOBS', 'VIEW_REQUESTS', 'VIEW_TICKETS', 'REPLY_TICKETS'];
+  for (const perm of createdPermissions) {
+    if (staffAllowed.includes(perm.code)) {
+      await (prisma as any).rolePermission.create({
+        data: {
+          role: UserRole.STAFF,
+          permissionId: perm.id,
+        },
+      });
+    }
+  }
+
+  console.log('✅ Seeded permissions and role assignments');
+
   // Hash password for all users
   const password = await argon2.hash('Password123!');
 
@@ -36,14 +118,15 @@ async function main() {
   // 1. CREATE USERS
   // ============================================
 
+
+
   const admin = await prisma.user.create({
     data: {
       email: 'admin@serviceflow.com',
       phoneNumber: '+1234567890',
       passwordHash: password,
-      fullName: 'Admin User',
+      fullName: 'Ops Admin',
       role: UserRole.ADMIN,
-      isTwoFactorEnabled: false,
       isActive: true,
       emailVerifiedAt: new Date(),
     },
@@ -55,7 +138,7 @@ async function main() {
       email: 'staff@serviceflow.com',
       phoneNumber: '+1234567891',
       passwordHash: password,
-      fullName: 'Staff Member',
+      fullName: 'Support Staff',
       role: UserRole.STAFF,
       isActive: true,
       emailVerifiedAt: new Date(),
@@ -296,6 +379,7 @@ async function main() {
       address: '123 Main St, New York, NY 10001',
       district: 'Manhattan',
       priceCents: 15000, // $150
+      executionDate: new Date(),
       status: JobStatus.COMPLETED,
       createdBy: staff.id,
       workerId: worker1.workerProfile!.id,
@@ -353,6 +437,7 @@ async function main() {
       address: '456 Park Ave, New York, NY 10022',
       district: 'Manhattan',
       priceCents: 18000,
+      executionDate: new Date(),
       status: JobStatus.PROOF_SUBMITTED,
       createdBy: staff.id,
       workerId: worker1.workerProfile!.id,
@@ -385,6 +470,7 @@ async function main() {
       address: '789 Brooklyn Ave, Brooklyn, NY 11201',
       district: 'Brooklyn',
       priceCents: 12000,
+      executionDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // In 2 days
       status: JobStatus.POSTED,
       createdBy: staff.id,
     },
@@ -401,6 +487,7 @@ async function main() {
       address: '321 Queens Blvd, Queens, NY 11101',
       district: 'Queens',
       priceCents: 9500,
+      executionDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), // Tomorrow
       status: JobStatus.ACCEPTED,
       createdBy: staff.id,
       workerId: worker2.workerProfile!.id,
@@ -519,50 +606,103 @@ async function main() {
 
   console.log('✅ Created notifications');
 
+  console.log('✅ Created audit logs');
+
   // ============================================
-  // 9. CREATE AUDIT LOGS
+  // 10. SEED SYSTEM CONFIG (PROFILE POLICY)
   // ============================================
 
-  await prisma.adminAuditLog.createMany({
-    data: [
-      {
-        actorId: admin.id,
-        actorEmail: admin.email,
-        action: 'APPROVE',
-        actionDetail: 'Approved worker ID verification',
-        entityType: 'IdVerification',
-        entityId: worker1.workerProfile!.id,
-        newValue: { status: 'APPROVED' },
-        ipAddress: '192.168.1.100',
-        userAgent: 'Mozilla/5.0...',
-      },
-      {
-        actorId: admin.id,
-        actorEmail: admin.email,
-        action: 'APPROVE',
-        actionDetail: 'Approved payout request',
-        entityType: 'PayoutRequest',
-        entityId: worker3.wallet!.id,
-        oldValue: { status: 'PENDING' },
-        newValue: { status: 'APPROVED', transactionRef: 'TXN123456789' },
-        ipAddress: '192.168.1.100',
-        userAgent: 'Mozilla/5.0...',
-      },
-      {
-        actorId: staff.id,
-        actorEmail: staff.email,
-        action: 'CREATE',
-        actionDetail: 'Created new job',
-        entityType: 'Job',
-        entityId: completedJob.id,
-        newValue: { title: 'Fix Kitchen Sink Leak', priceCents: 15000 },
-        ipAddress: '192.168.1.101',
-        userAgent: 'Mozilla/5.0...',
-      },
-    ],
+  const profilePolicy = [
+    { key: 'REQUIRE_PHONE', value: true, description: 'Mandatory phone number' },
+    { key: 'REQUIRE_ADDRESS', value: true, description: 'Mandatory home address' },
+    { key: 'REQUIRE_NIC', value: true, description: 'Mandatory National ID/NIC number' },
+    { key: 'REQUIRE_PROFILE_PHOTO', value: false, description: 'Is profile photo mandatory?' },
+    { key: 'REQUIRE_BANK_DETAILS', value: true, description: 'Mandatory bank account details' },
+    { key: 'REQUIRE_ID_VERIFICATION_FOR_JOBS', value: true, description: 'ID verification required to accept jobs' },
+    { key: 'REQUIRE_ID_VERIFICATION_FOR_PAYOUTS', value: true, description: 'ID verification required to request payouts' },
+    { key: 'REQUIRE_BANK_VERIFICATION_FOR_PAYOUTS', value: false, description: 'Bank verification required to request payouts' },
+    { key: 'REQUIRE_MIN_PROFILE_SCORE_FOR_JOBS', value: 80, description: 'Min completion score to accept jobs' },
+    { key: 'REQUIRE_MIN_PROFILE_SCORE_FOR_ONLINE', value: 70, description: 'Min completion score to go online' },
+    { key: 'REQUIRE_MIN_PROFILE_SCORE_FOR_PAYOUTS', value: 100, description: 'Min completion score to request payout' },
+    { key: 'VERIFICATION_REQUIRE_BACK_ID', value: true, description: 'Is ID back side image mandatory?' },
+    { key: 'VERIFICATION_REQUIRE_SELFIE', value: true, description: 'Is selfie/face-match mandatory for ID verification?' },
+  ];
+
+  for (const config of profilePolicy) {
+    await prisma.systemConfig.upsert({
+      where: { key: config.key },
+      update: { value: config.value, description: config.description },
+      create: { key: config.key, value: config.value, description: config.description },
+    });
+  }
+
+  console.log('✅ Seeded system configuration policies');
+
+  console.log('✅ Seeded system configuration policies');
+
+  // ============================================
+  // 11. SEED REGISTRATION REQUESTS And INVITES
+  // ============================================
+
+  await prisma.inviteToken.deleteMany();
+  await prisma.registrationRequest.deleteMany();
+
+  // 1. Pending Request
+  await prisma.registrationRequest.create({
+    data: {
+      fullName: 'Pending Guy',
+      email: 'pending@example.com',
+      phone: '+94771234567',
+      status: 'PENDING',
+    },
   });
 
-  console.log('✅ Created audit logs');
+  // 2. Another Pending Request
+  await prisma.registrationRequest.create({
+    data: {
+      fullName: 'Another Pending',
+      email: 'pending2@example.com',
+      phone: '+94777654321',
+      status: 'PENDING',
+    },
+  });
+
+  // 3. Approved Request
+  const approvedReq = await prisma.registrationRequest.create({
+    data: {
+      fullName: 'Approved Gal',
+      email: 'approved@example.com',
+      phone: '+94771122334',
+      status: 'APPROVED',
+      reviewedById: admin.id,
+      reviewedAt: new Date(),
+    },
+  });
+
+  // 4. Invite Token for Approved Request
+  const crypto = require('crypto');
+  const buffer = crypto.randomBytes(32);
+  const secret = buffer.toString('hex');
+  const tokenHash = await argon2.hash(secret);
+
+  const expires = new Date();
+  expires.setHours(expires.getHours() + 24);
+
+  const invite = await prisma.inviteToken.create({
+    data: {
+      requestId: approvedReq.id,
+      email: approvedReq.email,
+      phone: approvedReq.phone,
+      tokenHash,
+      expiresAt: expires,
+      deliveryMethod: 'WHATSAPP',
+      createdById: admin.id,
+      sentAt: new Date(),
+    },
+  });
+
+  console.log(`✅ Created Registration Requests & Invite Token.`);
+  console.log(`   - Invite Link (Local): http://localhost:3000/auth/accept-invite?token=${invite.id}.${secret}`);
 
   console.log('\n🎉 Database seeding completed successfully!');
   console.log('\n📊 Summary:');

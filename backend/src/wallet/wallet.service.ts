@@ -1,24 +1,95 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TransactionType, TransactionStatus, Prisma, Wallet } from '@prisma/client';
+import {
+  TransactionType,
+  TransactionStatus,
+  Prisma,
+  Wallet,
+  Transaction,
+} from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { calculateHmac, verifyHmac } from '../common/utils/security.utils';
 
 @Injectable()
 export class WalletService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {}
+
+  private signRow(data: any): string {
+    const secret =
+      this.configService.get('INTEGRITY_SECRET') ||
+      'serviceflow-integrity-key-2024';
+    // We only sign fields that represent the state
+    const { hmacSignature, createdAt, updatedAt, ...signable } = data;
+    return calculateHmac(signable, secret);
+  }
 
   async ensureWallet(userId: string): Promise<Wallet> {
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (wallet) return wallet;
 
+    const newWalletData: any = {
+      userId,
+      availableBalanceCents: 0,
+      pendingBalanceCents: 0,
+      totalEarnedCents: 0,
+      currency: 'USD',
+    };
+
+    newWalletData.hmacSignature = this.signRow(newWalletData);
+
     return this.prisma.wallet.create({
-      data: {
-        userId,
-        availableBalanceCents: 0,
-        pendingBalanceCents: 0,
-        totalEarnedCents: 0,
-        currency: 'USD'
-      }
+      data: newWalletData,
     });
+  }
+
+  private async secureUpdateWallet(
+    walletId: string,
+    data: Prisma.WalletUpdateInput,
+    tx: Prisma.TransactionClient,
+  ): Promise<Wallet> {
+    const updated = await tx.wallet.update({
+      where: { id: walletId },
+      data,
+    });
+
+    const hmacSignature = this.signRow(updated);
+    return tx.wallet.update({
+      where: { id: walletId },
+      data: { hmacSignature } as any,
+    });
+  }
+
+  private async secureCreateTransaction(
+    data: Prisma.TransactionUncheckedCreateInput,
+    tx: Prisma.TransactionClient,
+  ): Promise<Transaction> {
+    const created = await tx.transaction.create({ data });
+    const hmacSignature = this.signRow(created);
+    return tx.transaction.update({
+      where: { id: created.id },
+      data: { hmacSignature } as any,
+    });
+  }
+
+  async verifyIntegrity(userId: string): Promise<{ walletValid: boolean }> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) return { walletValid: true };
+    if (!wallet.hmacSignature) return { walletValid: false };
+
+    const isValid = verifyHmac(
+      wallet,
+      wallet.hmacSignature,
+      this.configService.get('INTEGRITY_SECRET') ||
+        'serviceflow-integrity-key-2024',
+    );
+    return { walletValid: isValid };
   }
 
   async getWallet(userId: string) {
@@ -63,23 +134,27 @@ export class WalletService {
 
     // Idempotency check
     const idempotencyKey = `${refType}:${refId}:${type}:${amountCents}`;
-    const existing = await prisma.transaction.findUnique({ where: { idempotencyKey } });
+    const existing = await prisma.transaction.findUnique({
+      where: { idempotencyKey },
+    });
     if (existing) return existing;
 
     const newBalance = wallet.availableBalanceCents + amountCents;
 
     // Update Wallet
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
+    await this.secureUpdateWallet(
+      wallet.id,
+      {
         availableBalanceCents: { increment: amountCents },
-        totalEarnedCents: type === 'CREDIT' ? { increment: amountCents } : undefined,
+        totalEarnedCents:
+          type === 'CREDIT' ? { increment: amountCents } : undefined,
       },
-    });
+      prisma,
+    );
 
     // Create Ledger Entry
-    return prisma.transaction.create({
-      data: {
+    return this.secureCreateTransaction(
+      {
         walletId: wallet.id,
         type,
         amountCents,
@@ -89,9 +164,10 @@ export class WalletService {
         description,
         balanceAfterCents: newBalance,
         idempotencyKey,
-        completedAt: new Date(), // Instant
+        completedAt: new Date(),
       },
-    });
+      prisma,
+    );
   }
 
   /**
@@ -114,23 +190,26 @@ export class WalletService {
     }
 
     const idempotencyKey = `${refType}:${refId}:HOLD:${amountCents}`;
-    const existing = await prisma.transaction.findUnique({ where: { idempotencyKey } });
+    const existing = await prisma.transaction.findUnique({
+      where: { idempotencyKey },
+    });
     if (existing) return existing;
 
     const newBalance = wallet.availableBalanceCents - amountCents;
 
     // Update Wallet
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
+    await this.secureUpdateWallet(
+      wallet.id,
+      {
         availableBalanceCents: { decrement: amountCents },
         pendingBalanceCents: { increment: amountCents },
       },
-    });
+      prisma,
+    );
 
     // Create Ledger Entry
-    return prisma.transaction.create({
-      data: {
+    return this.secureCreateTransaction(
+      {
         walletId: wallet.id,
         type: 'HOLD' as any,
         amountCents,
@@ -138,11 +217,12 @@ export class WalletService {
         referenceType: refType,
         referenceId: refId,
         description,
-        balanceAfterCents: newBalance, // Available balance reflects the hold
+        balanceAfterCents: newBalance,
         idempotencyKey,
         completedAt: new Date(),
       },
-    });
+      prisma,
+    );
   }
 
   /**
@@ -164,21 +244,24 @@ export class WalletService {
     // Ideally we check if pending >= amount, but let's assume system integrity.
 
     const idempotencyKey = `${refType}:${refId}:RELEASE:${amountCents}`;
-    const existing = await prisma.transaction.findUnique({ where: { idempotencyKey } });
+    const existing = await prisma.transaction.findUnique({
+      where: { idempotencyKey },
+    });
     if (existing) return existing;
 
     const newBalance = wallet.availableBalanceCents + amountCents;
 
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
+    await this.secureUpdateWallet(
+      wallet.id,
+      {
         availableBalanceCents: { increment: amountCents },
         pendingBalanceCents: { decrement: amountCents },
       },
-    });
+      prisma,
+    );
 
-    return prisma.transaction.create({
-      data: {
+    return this.secureCreateTransaction(
+      {
         walletId: wallet.id,
         type: 'RELEASE' as any,
         amountCents,
@@ -190,7 +273,8 @@ export class WalletService {
         idempotencyKey,
         completedAt: new Date(),
       },
-    });
+      prisma,
+    );
   }
 
   /**
@@ -210,40 +294,30 @@ export class WalletService {
     const wallet = await this.ensureWallet(userId);
 
     const idempotencyKey = `${refType}:${refId}:DEBIT:${amountCents}`;
-    const existing = await prisma.transaction.findUnique({ where: { idempotencyKey } });
+    const existing = await prisma.transaction.findUnique({
+      where: { idempotencyKey },
+    });
     if (existing) return existing;
 
     let newBalance = wallet.availableBalanceCents;
 
     if (fromPending) {
-      // Payout completed: Pending decreases, Available stays same.
-      // BalanceAfterCents usually tracks available balance in ledger? 
-      // Or effective equity? Let's track available balance.
-      await prisma.wallet.update({
-        where: { id: wallet.id },
-        data: { pendingBalanceCents: { decrement: amountCents } },
-      });
-      // available balance hasn't changed.
+      await this.secureUpdateWallet(
+        wallet.id,
+        { pendingBalanceCents: { decrement: amountCents } },
+        prisma,
+      );
     } else {
-      // Penalty: Available decreases.
-      if (wallet.availableBalanceCents < amountCents) {
-        // Allow negative? "All wallet-changing operations must use Prisma transaction"
-        // Admin adjustment might force negative.
-        // Let's allow negative for penalty/correction if needed, or throw.
-        // For now, strict check.
-        if (amountCents > wallet.availableBalanceCents) {
-          // allow going negative if admin?
-        }
-      }
       newBalance = wallet.availableBalanceCents - amountCents;
-      await prisma.wallet.update({
-        where: { id: wallet.id },
-        data: { availableBalanceCents: { decrement: amountCents } },
-      });
+      await this.secureUpdateWallet(
+        wallet.id,
+        { availableBalanceCents: { decrement: amountCents } },
+        prisma,
+      );
     }
 
-    return prisma.transaction.create({
-      data: {
+    return this.secureCreateTransaction(
+      {
         walletId: wallet.id,
         type: TransactionType.DEBIT,
         amountCents,
@@ -251,10 +325,11 @@ export class WalletService {
         referenceType: refType,
         referenceId: refId,
         description,
-        balanceAfterCents: newBalance, // Shows available balance
+        balanceAfterCents: newBalance,
         idempotencyKey,
         completedAt: new Date(),
       },
-    });
+      prisma,
+    );
   }
 }

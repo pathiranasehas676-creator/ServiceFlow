@@ -3,25 +3,25 @@
  */
 
 export interface EmailVerificationData {
-    email: string;
-    fullName: string;
-    verificationToken: string;
-    expiresInHours: number;
+  email: string;
+  fullName: string;
+  verificationToken: string;
+  expiresInHours: number;
 }
 
 export function generateEmailVerification(data: EmailVerificationData): {
-    to: string;
-    subject: string;
-    html: string;
-    text: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
 } {
-    const { email, fullName, verificationToken, expiresInHours } = data;
+  const { email, fullName, verificationToken, expiresInHours } = data;
 
-    // In production, use environment variable for frontend URL
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const verificationLink = `${frontendUrl}/auth/verify-email?token=${verificationToken}`;
+  // In production, use environment variable for frontend URL
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const verificationLink = `${frontendUrl}/auth/verify-email?token=${verificationToken}`;
 
-    const html = `
+  const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -114,7 +114,7 @@ export function generateEmailVerification(data: EmailVerificationData): {
 </html>
   `;
 
-    const text = `
+  const text = `
 Verify Your Email - ServiceFlow
 
 Hi ${fullName},
@@ -133,10 +133,10 @@ This is an automated email from ServiceFlow. Please do not reply to this email.
 © ${new Date().getFullYear()} ServiceFlow. All rights reserved.
   `.trim();
 
-    return {
-        to: email,
-        subject: 'Verify Your Email - ServiceFlow',
-        html,
-        text,
-    };
+  return {
+    to: email,
+    subject: 'Verify Your Email - ServiceFlow',
+    html,
+    text,
+  };
 }

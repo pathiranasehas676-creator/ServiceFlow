@@ -45,6 +45,15 @@ export async function processQueue() {
                             message: item.payload.message
                         }, config);
                         break;
+
+                    case 'JOB_ARRIVE' as any:
+                        await api.post(`/jobs/${item.payload.jobId}/arrive`, {
+                            lat: item.payload.lat,
+                            lng: item.payload.lng,
+                            accuracyMeters: item.payload.accuracyMeters,
+                            isMock: item.payload.isMock
+                        }, config);
+                        break;
                 }
 
                 await queueService.markSent(item.id);

@@ -7,12 +7,15 @@ import {
   UseGuards,
   Req,
   BadRequestException,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { StorageService } from './storage.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { FilePurpose } from '@prisma/client';
 import {
   PresignIdDto,
@@ -29,6 +32,44 @@ export class StorageController {
   constructor(private readonly storageService: StorageService) { }
 
   // ============================================
+  // DIRECT UPLOAD (Proxy through backend → MinIO)
+  // ============================================
+
+  @Post('upload')
+  @Roles('WORKER', 'USER')
+  @ApiOperation({ summary: 'Upload a file via backend proxy (avoids CORS with MinIO)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  async uploadFileDirect(
+    @UploadedFile() file: any,
+    @Query('purpose') purposeStr: string,
+    @Query('side') side: string,
+    @Query('jobId') jobId: string,
+    @Req() req: any,
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded');
+
+    const purposeMap: Record<string, FilePurpose> = {
+      'FRONT': FilePurpose.ID_FRONT,
+      'BACK': FilePurpose.ID_BACK,
+      'SELFIE': FilePurpose.ID_SELFIE,
+      'PROFILE': FilePurpose.PROFILE_PHOTO,
+      'PROOF': FilePurpose.JOB_PROOF,
+    };
+
+    const purpose = purposeMap[purposeStr || side || 'FRONT'] || FilePurpose.ID_FRONT;
+
+    return this.storageService.uploadFileDirect(
+      req.user.id,
+      purpose,
+      file.mimetype,
+      file.size,
+      file.buffer,
+      jobId,
+    );
+  }
+
+  // ============================================
   // WORKER: ID VERIFICATION UPLOADS
   // ============================================
 
@@ -38,8 +79,11 @@ export class StorageController {
   async presignIdUpload(@Body() dto: PresignIdDto, @Req() req: any) {
     const uploads = await Promise.all(
       dto.files.map(async (file) => {
-        const purpose =
-          file.side === 'FRONT' ? FilePurpose.ID_FRONT : FilePurpose.ID_BACK;
+        let purpose: FilePurpose;
+        if (file.side === 'FRONT') purpose = FilePurpose.ID_FRONT;
+        else if (file.side === 'BACK') purpose = FilePurpose.ID_BACK;
+        else purpose = FilePurpose.ID_SELFIE;
+
         return this.storageService.generatePresignedPutUrl(
           req.user.id,
           purpose,
@@ -58,8 +102,11 @@ export class StorageController {
   async confirmIdUpload(@Body() dto: ConfirmIdUploadDto, @Req() req: any) {
     const fileObjects = await Promise.all(
       dto.uploads.map(async (upload) => {
-        const purpose =
-          upload.side === 'FRONT' ? FilePurpose.ID_FRONT : FilePurpose.ID_BACK;
+        let purpose: FilePurpose;
+        if (upload.side === 'FRONT') purpose = FilePurpose.ID_FRONT;
+        else if (upload.side === 'BACK') purpose = FilePurpose.ID_BACK;
+        else purpose = FilePurpose.ID_SELFIE;
+
         return this.storageService.confirmUpload(
           req.user.id,
           upload.objectKey,
@@ -74,6 +121,26 @@ export class StorageController {
       message: 'ID documents uploaded successfully',
       files: fileObjects,
     };
+  }
+
+  // ============================================
+  // WORKER: PROFILE PHOTO UPLOADS
+  // ============================================
+
+  @Post('profile-photo/presign')
+  @Roles('WORKER', 'USER')
+  @ApiOperation({ summary: 'Get presigned URL for profile photo upload' })
+  async presignProfilePhoto(
+    @Body() dto: { mimeType: string; sizeBytes: number },
+    @Req() req: any,
+  ) {
+    const upload = await this.storageService.generatePresignedPutUrl(
+      req.user.id,
+      FilePurpose.PROFILE_PHOTO,
+      dto.mimeType,
+      dto.sizeBytes,
+    );
+    return upload;
   }
 
   // ============================================

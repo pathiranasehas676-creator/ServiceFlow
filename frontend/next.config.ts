@@ -170,6 +170,7 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 
 const nextConfig: NextConfig = {
   // output: "export", // not needed unless static export
+  turbopack: {},
   async redirects() {
     return [
       {

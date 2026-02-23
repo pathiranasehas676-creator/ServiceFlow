@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 interface UploadQueueProps {
     jobId: string;
-    onUploadComplete: (urls: string[]) => void;
+    onUploadComplete: (files: { imageKey: string; mimeType: string; fileSizeBytes: number }[]) => void;
     maxFiles?: number;
 }
 
@@ -41,17 +41,15 @@ export function UploadQueue({ jobId, onUploadComplete, maxFiles = 3 }: UploadQue
 
     const startUpload = async () => {
         setIsProcessing(true);
-        const uploadedUrls: string[] = [];
+        const uploadedUrls: { imageKey: string; mimeType: string; fileSizeBytes: number }[] = [];
 
         try {
             for (let i = 0; i < files.length; i++) {
                 if (files[i].url) {
-                    uploadedUrls.push(files[i].url!);
                     continue;
                 }
 
                 try {
-                    // Update progress to show something is happening
                     setFiles(prev => {
                         const updated = [...prev];
                         updated[i].progress = 10;
@@ -60,12 +58,12 @@ export function UploadQueue({ jobId, onUploadComplete, maxFiles = 3 }: UploadQue
 
                     // 1. Get Presigned URL
                     const fileName = `${jobId}_${Date.now()}_${files[i].file.name}`;
-                    const presignRes = await api.post(`/jobs/${jobId}/proof/presign`, {
+                    const presignRes = await api.post<{ uploadUrl: string; fileKey: string }>(`/jobs/${jobId}/proof/presign`, {
                         fileName,
-                        contentType: files[i].file.type
+                        mimeType: files[i].file.type,
+                        sizeBytes: files[i].file.size
                     });
 
-                    // Assuming presignRes is { uploadUrl, fileKey }
                     const { uploadUrl, fileKey } = presignRes;
 
                     setFiles(prev => {
@@ -74,7 +72,7 @@ export function UploadQueue({ jobId, onUploadComplete, maxFiles = 3 }: UploadQue
                         return updated;
                     });
 
-                    // 2. Upload to storage (e.g. MinIO/S3) using native fetch
+                    // 2. Upload to storage using native fetch
                     const uploadRes = await fetch(uploadUrl, {
                         method: 'PUT',
                         body: files[i].file,
@@ -95,7 +93,11 @@ export function UploadQueue({ jobId, onUploadComplete, maxFiles = 3 }: UploadQue
                         return updated;
                     });
 
-                    uploadedUrls.push(fileKey);
+                    uploadedUrls.push({
+                        imageKey: fileKey,
+                        mimeType: files[i].file.type,
+                        fileSizeBytes: files[i].file.size
+                    });
 
                 } catch (fileErr) {
                     console.error('File upload error:', fileErr);
@@ -104,8 +106,7 @@ export function UploadQueue({ jobId, onUploadComplete, maxFiles = 3 }: UploadQue
                         updated[i].error = 'Failed';
                         return updated;
                     });
-                    throw fileErr; // Stop whole process or continue? Continue for others?
-                    // For now, if one fails, we stop.
+                    throw fileErr;
                 }
             }
 

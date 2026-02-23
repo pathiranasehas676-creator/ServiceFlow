@@ -1,104 +1,108 @@
 import {
   Controller,
   Post,
-  Patch,
   Body,
-  Param,
   UseGuards,
+  Req,
   Get,
+  Param,
   Query,
-  ForbiddenException,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PayoutsService } from './payouts.service';
-import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole, PayoutStatus } from '@prisma/client';
-import { GetUser } from '../auth/decorators/get-user.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Permissions } from '../common/decorators/permissions.decorator';
+import {
+  CreatePayoutRequestDto,
+  RejectPayoutDto,
+  MarkPaidDto,
+} from './dto/payouts.dto';
 
-@Controller('admin/finance/payouts')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN, UserRole.STAFF) // Allow Staff for most actions
+@ApiTags('payouts')
+@Controller('payouts')
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@ApiBearerAuth()
 export class PayoutsController {
-  constructor(
-    private readonly payoutsService: PayoutsService,
-    private readonly authService: AuthService
-  ) { }
+  constructor(private readonly payoutsService: PayoutsService) {}
 
-  @Get()
-  async findAll(@Query('status') status?: PayoutStatus, @Query('page') page = 1) {
-    return this.payoutsService.findAll({ status }, Number(page));
-  }
-
-  // Sensitive Data View (Requires Password Re-Auth)
-  @Post(':id/bank-details')
-  @Roles(UserRole.ADMIN) // Admin only for bank details
-  async viewBankDetails(@Param('id') id: string, @Body('password') password: string, @GetUser() user: any) {
-    if (!password) throw new ForbiddenException('Password required');
-
-    const validatedUser = await this.authService.validateUser(user.email, password);
-    if (!validatedUser) {
-      throw new ForbiddenException('Invalid password verification');
-    }
-
-    return this.payoutsService.getPayoutDetailsWithBank(id);
-  }
-
-  @Post(':id/approve')
-  async approve(@Param('id') id: string, @GetUser() user: any) {
-    return this.payoutsService.approvePayout(id, user.id);
-  }
-
-  @Post(':id/mark-processing')
-  async markProcessing(@Param('id') id: string, @GetUser() user: any) {
-    return this.payoutsService.markProcessing(id, user.id);
-  }
-
-  @Post(':id/reject')
-  async reject(
-    @Param('id') id: string,
-    @Body('reason') reason: string,
-    @GetUser() user: any,
-  ) {
-    return this.payoutsService.rejectPayout(id, reason, user.id);
-  }
-
-  @Post(':id/mark-paid')
-  async markPaid(
-    @Param('id') id: string,
-    @GetUser() user: any,
-    @Body('receiptFileKey') receiptFileKey: string,
-    @Body('paymentReference') paymentReference?: string,
-  ) {
-    return this.payoutsService.markPaid(id, user.id, receiptFileKey, paymentReference);
-  }
-}
-
-// Separate controller for Worker
-@Controller('worker/payouts')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.WORKER)
-export class WorkerPayoutsController {
-  constructor(private readonly payoutsService: PayoutsService) { }
-
-  @Get()
-  async getMyPayouts(@GetUser() user: any) {
-    return this.payoutsService.getPayoutsByUser(user.id);
-  }
+  // --- WORKER ENDPOINTS ---
 
   @Post('request')
-  async request(
-    @Body('amountCents') amountCents: number,
-    @Body('type') type: any,
-    @GetUser() user: any,
-  ) {
-    return this.payoutsService.requestPayout(user.id, amountCents, type);
+  @Roles('WORKER')
+  @ApiOperation({ summary: 'Request a payout' })
+  async requestPayout(@Req() req: any, @Body() dto: CreatePayoutRequestDto) {
+    return this.payoutsService.requestPayout(req.user.userId, dto);
   }
 
-  @Get(':id/receipt-url')
-  async getReceiptUrl(@Param('id') id: string, @GetUser() user: any) {
-    const url = await this.payoutsService.getReceiptUrl(id, user.id);
-    return { url };
+  @Get('my-history')
+  @Roles('WORKER')
+  @ApiOperation({ summary: 'Get payout history' })
+  async getMyHistory(@Req() req: any, @Query() query: any) {
+    return this.payoutsService.findAll({ ...query, userId: req.user.userId });
+  }
+
+  @Get(':id')
+  @Roles('WORKER', 'ADMIN', 'STAFF')
+  @ApiOperation({ summary: 'Get payout details' })
+  async getPayout(@Param('id') id: string, @Req() req: any) {
+    const isAdmin = ['ADMIN', 'STAFF'].includes(req.user.role);
+    return this.payoutsService.getPayout(id, req.user.userId, isAdmin);
+  }
+
+  // --- ADMIN ENDPOINTS ---
+
+  @Get('admin/all')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('VIEW_FINANCE_DASHBOARD')
+  @ApiOperation({ summary: 'List all payout requests' })
+  async getAllPayouts(@Query() query: any) {
+    return this.payoutsService.findAll(query);
+  }
+
+  @Post('admin/:id/approve')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('PROCESS_PAYOUTS')
+  @ApiOperation({ summary: 'Approve a payout request' })
+  async approvePayout(@Param('id') id: string, @Req() req: any) {
+    return this.payoutsService.approvePayout(id, req.user.userId);
+  }
+
+  @Post('admin/:id/reject')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('PROCESS_PAYOUTS')
+  @ApiOperation({ summary: 'Reject a payout request' })
+  async rejectPayout(
+    @Param('id') id: string,
+    @Body() dto: RejectPayoutDto,
+    @Req() req: any,
+  ) {
+    return this.payoutsService.rejectPayout(id, req.user.userId, dto);
+  }
+
+  @Post('admin/:id/receipt/presign')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('PROCESS_PAYOUTS')
+  @ApiOperation({ summary: 'Get presigned URL for receipt upload' })
+  async presignReceipt(
+    @Param('id') id: string,
+    @Body() body: { mimeType: string; size: number },
+    @Req() req: any,
+  ) {
+    return this.payoutsService.presignReceipt(id, req.user.userId, body);
+  }
+
+  @Post('admin/:id/mark-paid')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('PROCESS_PAYOUTS')
+  @ApiOperation({ summary: 'Mark payout as paid and attach receipt' })
+  async markPaid(
+    @Param('id') id: string,
+    @Body() dto: MarkPaidDto,
+    @Req() req: any,
+  ) {
+    return this.payoutsService.markPaid(id, req.user.userId, dto);
   }
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import axios from 'axios';
+import { api, ApiError } from '@/lib/apiClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -21,18 +21,16 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-
             // 1. Login
-            const loginRes = await axios.post(`${API_URL}/auth/login`, { email, password }, { withCredentials: true });
-            const token = loginRes.data.accessToken;
+            const loginRes = await api.post('/auth/login', { email, password });
+            const token = loginRes.accessToken;
             localStorage.setItem('token', token);
 
             // 2. Fetch User Details (Role)
-            const meRes = await axios.get(`${API_URL}/auth/me`, {
+            // Note: The me info is often returned in login, but we'll follow existing pattern
+            const user = await api.get('/auth/me', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            const user = meRes.data;
 
             // 3. Set Cookie for Middleware (mocking Zustand persist structure)
             const authState = {
@@ -60,11 +58,15 @@ export default function LoginPage() {
             }
 
         } catch (err: any) {
-            console.error('Login error:', err.response?.status, JSON.stringify(err.response?.data, null, 2));
-            const errorData = err.response?.data;
+            console.error('Login error:', err);
+
             let msg = 'Login failed.';
 
-            if (errorData?.message) {
+            if (err instanceof ApiError) {
+                msg = err.message;
+            } else if (err.response?.data?.message) {
+                // Fallback for any remaining axios/fetch errors
+                const errorData = err.response.data;
                 msg = Array.isArray(errorData.message)
                     ? errorData.message.join(', ')
                     : errorData.message;
@@ -75,7 +77,7 @@ export default function LoginPage() {
             setError(msg);
 
             // Check for unverified email error
-            if (msg && (msg.includes('Email not verified') || msg.includes('email not verified'))) {
+            if (msg && (msg.toLowerCase().includes('email not verified'))) {
                 setShowResendLink(true);
             }
         } finally {

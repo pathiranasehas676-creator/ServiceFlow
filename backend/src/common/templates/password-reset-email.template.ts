@@ -1,6 +1,6 @@
 /**
  * Email Template for Password Reset
- * 
+ *
  * This is a stub template. In production, integrate with:
  * - SendGrid
  * - AWS SES
@@ -9,25 +9,25 @@
  */
 
 export interface PasswordResetEmailData {
-    email: string;
-    fullName: string;
-    resetToken: string;
-    expiresInMinutes: number;
+  email: string;
+  fullName: string;
+  resetToken: string;
+  expiresInMinutes: number;
 }
 
 export function generatePasswordResetEmail(data: PasswordResetEmailData): {
-    to: string;
-    subject: string;
-    html: string;
-    text: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
 } {
-    const { email, fullName, resetToken, expiresInMinutes } = data;
+  const { email, fullName, resetToken, expiresInMinutes } = data;
 
-    // In production, use environment variable for frontend URL
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const resetLink = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
+  // In production, use environment variable for frontend URL
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const resetLink = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
-    const html = `
+  const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -167,7 +167,7 @@ export function generatePasswordResetEmail(data: PasswordResetEmailData): {
 </html>
   `;
 
-    const text = `
+  const text = `
 Reset Your Password - ServiceFlow
 
 Hi ${fullName},
@@ -194,24 +194,24 @@ If you need help, contact us at support@serviceflow.com
 © ${new Date().getFullYear()} ServiceFlow. All rights reserved.
   `.trim();
 
-    return {
-        to: email,
-        subject: 'Reset Your Password - ServiceFlow',
-        html,
-        text,
-    };
+  return {
+    to: email,
+    subject: 'Reset Your Password - ServiceFlow',
+    html,
+    text,
+  };
 }
 
 /**
  * Example integration with SendGrid:
- * 
+ *
  * import sgMail from '@sendgrid/mail';
- * 
+ *
  * sgMail.setApiKey(process.env.SENDGRID_API_KEY);
- * 
+ *
  * export async function sendPasswordResetEmail(data: PasswordResetEmailData) {
  *   const emailContent = generatePasswordResetEmail(data);
- *   
+ *
  *   await sgMail.send({
  *     to: emailContent.to,
  *     from: 'noreply@serviceflow.com',
@@ -224,9 +224,9 @@ If you need help, contact us at support@serviceflow.com
 
 /**
  * Example integration with Nodemailer:
- * 
+ *
  * import nodemailer from 'nodemailer';
- * 
+ *
  * const transporter = nodemailer.createTransport({
  *   host: process.env.SMTP_HOST,
  *   port: parseInt(process.env.SMTP_PORT || '587'),
@@ -236,10 +236,10 @@ If you need help, contact us at support@serviceflow.com
  *     pass: process.env.SMTP_PASS,
  *   },
  * });
- * 
+ *
  * export async function sendPasswordResetEmail(data: PasswordResetEmailData) {
  *   const emailContent = generatePasswordResetEmail(data);
- *   
+ *
  *   await transporter.sendMail({
  *     from: '"ServiceFlow" <noreply@serviceflow.com>',
  *     to: emailContent.to,

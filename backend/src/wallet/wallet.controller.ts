@@ -1,28 +1,32 @@
-import { Controller, Get, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, UseGuards, Req } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
-import { GetUser } from '../auth/decorators/get-user.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
-@Controller('worker/wallet')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.WORKER)
+@ApiTags('wallet')
+@Controller('wallet')
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@ApiBearerAuth()
 export class WalletController {
-  constructor(private readonly walletService: WalletService) { }
+  constructor(private readonly walletService: WalletService) {}
 
-  @Get('transactions')
-  async getTransactions(
-    @GetUser() user: any,
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
-  ) {
-    return this.walletService.getTransactions(user.id, Number(page), Number(limit));
+  @Get('my')
+  @ApiOperation({ summary: 'Get current user wallet' })
+  async getMyWallet(@Req() req: any) {
+    return this.walletService.getWallet(req.user.userId);
   }
 
-  @Get()
-  async getMyWallet(@GetUser() user: any) {
-    return this.walletService.getWallet(user.id);
+  @Get('transactions')
+  @ApiOperation({ summary: 'Get transaction history' })
+  async getTransactions(@Req() req: any) {
+    return this.walletService.getTransactions(req.user.userId);
+  }
+
+  @Get('integrity')
+  @ApiOperation({ summary: 'Verify wallet data integrity' })
+  async getIntegrity(@Req() req: any) {
+    return this.walletService.verifyIntegrity(req.user.userId);
   }
 }

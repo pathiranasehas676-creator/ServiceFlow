@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Search, Briefcase, MapPin, Calendar, Filter, RefreshCw } from 'lucide-react';
+import { Search, Briefcase, MapPin, Calendar, Filter, RefreshCw, Plus, Eye, Edit } from 'lucide-react';
 import {
     Card,
     CardContent,
@@ -72,6 +72,11 @@ export default function JobsPage() {
                     <Button variant="outline" size="sm" onClick={fetchJobs}>
                         <RefreshCw className="mr-2 h-4 w-4" /> Refresh
                     </Button>
+                    <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-700">
+                        <a href="/admin/jobs/create">
+                            <Plus className="mr-2 h-4 w-4" /> Create Job
+                        </a>
+                    </Button>
                 </div>
             </div>
 
@@ -119,18 +124,21 @@ export default function JobsPage() {
                                 <TableHead>Customer</TableHead>
                                 <TableHead>Worker</TableHead>
                                 <TableHead className="text-right pr-6">Price</TableHead>
+                                <TableHead className="text-right pr-6">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={5} className="h-24 text-center">Loading...</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={6} className="h-24 text-center">Loading...</TableCell></TableRow>
                             ) : jobs.length === 0 ? (
-                                <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No jobs found.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No jobs found.</TableCell></TableRow>
                             ) : (
                                 jobs.map((job) => (
                                     <TableRow key={job.id} className="group hover:bg-muted/5 transition-colors">
                                         <TableCell className="pl-6 py-4">
-                                            <div className="font-medium text-slate-900">{job.title}</div>
+                                            <a href={`/admin/jobs/${job.id}`} className="font-medium text-slate-900 hover:text-indigo-600 hover:underline transition-colors">
+                                                {job.title}
+                                            </a>
                                             <div className="text-xs text-muted-foreground line-clamp-1">{job.description}</div>
                                             <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
                                                 <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {job.district}</span>
@@ -143,7 +151,7 @@ export default function JobsPage() {
                                                 ${job.status === 'COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' : ''}
                                                 ${job.status === 'CANCELLED' ? 'bg-red-50 text-red-700 border-red-200' : ''}
                                             `}>
-                                                {job.status}
+                                                {job.status === 'CANCELLED' && job.cancelReason === 'NO_SHOW' ? 'NO SHOW' : job.status}
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
@@ -162,6 +170,22 @@ export default function JobsPage() {
                                         </TableCell>
                                         <TableCell className="text-right pr-6 font-bold text-slate-700">
                                             ${(job.priceCents / 100).toFixed(2)}
+                                        </TableCell>
+                                        <TableCell className="text-right pr-6">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" asChild>
+                                                    <a href={`/admin/jobs/${job.id}`}>
+                                                        <Eye className="h-4 w-4" />
+                                                    </a>
+                                                </Button>
+                                                {(job.status === 'POSTED' || job.status === 'ACCEPTED') && (
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50" asChild title="Edit Job">
+                                                        <a href={`/admin/jobs/${job.id}/edit`}>
+                                                            <Edit className="h-4 w-4" />
+                                                        </a>
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))
