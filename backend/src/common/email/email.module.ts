@@ -5,9 +5,9 @@ import { EmailController } from './email.controller';
 
 @Global()
 @Module({
-    imports: [ConfigModule],
-    controllers: [EmailController],
-    providers: [EmailService],
-    exports: [EmailService],
+  imports: [ConfigModule],
+  controllers: [EmailController],
+  providers: [EmailService],
+  exports: [EmailService],
 })
-export class EmailModule { }
+export class EmailModule {}

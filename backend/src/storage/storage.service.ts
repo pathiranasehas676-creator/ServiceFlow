@@ -13,7 +13,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilePurpose } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class StorageService {
@@ -25,6 +25,7 @@ export class StorageService {
     'image/jpeg',
     'image/png',
     'image/webp',
+    'application/pdf',
   ];
   private readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
   private readonly MAX_PROOF_IMAGES = 5;
@@ -55,6 +56,66 @@ export class StorageService {
   }
 
   /**
+   * Upload file directly (proxy through backend → MinIO)
+   * Used when browser cannot access MinIO directly due to CORS
+   */
+  async uploadFileDirect(
+    userId: string,
+    purpose: FilePurpose,
+    mimeType: string,
+    sizeBytes: number,
+    buffer: Buffer,
+    jobId?: string,
+    idVerificationId?: string,
+  ) {
+    // Validate mime type
+    if (!this.ALLOWED_MIME_TYPES.includes(mimeType)) {
+      throw new BadRequestException(
+        `Invalid file type. Allowed: ${this.ALLOWED_MIME_TYPES.join(', ')}`,
+      );
+    }
+
+    // Validate file size
+    if (sizeBytes > this.MAX_FILE_SIZE) {
+      throw new BadRequestException(
+        `File too large. Max size: ${this.MAX_FILE_SIZE / 1024 / 1024}MB`,
+      );
+    }
+
+    // Generate object key
+    const extension = mimeType.split('/')[1];
+    const env = this.configService.get('NODE_ENV', 'dev');
+    const objectKey = `${env}/${purpose.toLowerCase()}/${userId}/${jobId || 'general'}/${randomUUID()}.${extension}`;
+
+    // Upload directly to MinIO from backend
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: objectKey,
+      Body: buffer,
+      ContentType: mimeType,
+      ContentLength: sizeBytes,
+    });
+
+    await this.s3Client.send(command);
+
+    // Persist to DB
+    const fileObject = await this.prisma.fileObject.create({
+      data: {
+        purpose,
+        key: objectKey,
+        url: `s3://${this.bucketName}/${objectKey}`,
+        mimeType,
+        sizeBytes,
+        uploadedBy: userId,
+        jobId,
+        verificationId: idVerificationId,
+      },
+    });
+
+    return { objectKey, fileObjectId: fileObject.id };
+  }
+
+  /**
    * Generate presigned PUT URL for file upload
    */
   async generatePresignedPutUrl(
@@ -81,7 +142,7 @@ export class StorageService {
     // Generate object key
     const extension = mimeType.split('/')[1];
     const env = this.configService.get('NODE_ENV', 'dev');
-    const objectKey = `${env}/${purpose.toLowerCase()}/${userId}/${jobId || 'general'}/${uuidv4()}.${extension}`;
+    const objectKey = `${env}/${purpose.toLowerCase()}/${userId}/${jobId || 'general'}/${randomUUID()}.${extension}`;
 
     // Create presigned PUT URL
     const command = new PutObjectCommand({
@@ -106,14 +167,14 @@ export class StorageService {
    * Generate presigned GET URL for file download/preview
    */
   async generatePresignedGetUrl(
-    objectKey: string,
+    fileId: string,
     userId: string,
     userRole: string,
   ) {
     // Fetch file metadata
     const fileObject = await this.prisma.fileObject.findUnique({
-      where: { objectKey },
-      include: { job: true, idVerification: true },
+      where: { id: fileId },
+      include: { job: true, verification: true },
     });
 
     if (!fileObject) {
@@ -128,10 +189,10 @@ export class StorageService {
       );
     }
 
-    // Generate presigned GET URL
+    // Generate presigned GET URL using the stored key
     const command = new GetObjectCommand({
       Bucket: this.bucketName,
-      Key: objectKey,
+      Key: fileObject.key,
     });
 
     const getUrl = await getSignedUrl(this.s3Client, command, {
@@ -144,6 +205,22 @@ export class StorageService {
       mimeType: fileObject.mimeType,
       sizeBytes: fileObject.sizeBytes,
     };
+  }
+
+  /**
+   * Generate presigned GET URL using key directly (Admin only or system internal)
+   */
+  async generatePresignedGetUrlByKey(key: string) {
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+    });
+
+    const getUrl = await getSignedUrl(this.s3Client, command, {
+      expiresIn: this.GET_URL_EXPIRY,
+    });
+
+    return getUrl;
   }
 
   /**
@@ -160,14 +237,14 @@ export class StorageService {
   ) {
     return this.prisma.fileObject.create({
       data: {
-        bucket: this.bucketName,
-        objectKey,
         purpose,
+        key: objectKey,
+        url: `s3://${this.bucketName}/${objectKey}`,
         mimeType,
         sizeBytes,
-        uploadedByUserId: userId,
+        uploadedBy: userId,
         jobId,
-        idVerificationId,
+        verificationId: idVerificationId,
       },
     });
   }

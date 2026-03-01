@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class SecurityAlertsService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async getAlerts(page: number = 1, pageSize: number = 20) {
     const skip = (page - 1) * pageSize;

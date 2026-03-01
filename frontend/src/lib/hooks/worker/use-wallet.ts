@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { Wallet, Transaction, PayoutRequest } from '@/lib/types/worker';
 import { toast } from 'sonner';
 import { useWorkerProfile } from './use-worker-profile';
@@ -12,24 +12,21 @@ export function useWallet() {
     const walletQuery = useQuery<Wallet>({
         queryKey: ['worker', 'wallet'],
         queryFn: async () => {
-            const response = await apiClient.get('/worker/wallet');
-            return response.data;
+            return await api.get('/worker/wallet');
         },
     });
 
     const transactionsQuery = useQuery<Transaction[]>({
         queryKey: ['worker', 'transactions'],
         queryFn: async () => {
-            const response = await apiClient.get('/worker/transactions');
-            return response.data;
+            return await api.get('/worker/transactions');
         },
     });
 
     const payoutsQuery = useQuery<PayoutRequest[]>({
         queryKey: ['worker', 'payouts'],
         queryFn: async () => {
-            const response = await apiClient.get('/worker/payouts');
-            return response.data;
+            return await api.get('/worker/payouts');
         },
     });
 
@@ -46,8 +43,7 @@ export function useWallet() {
                 });
                 return { offline: true };
             }
-            const response = await apiClient.post('/worker/payouts', { amountCents });
-            return response.data;
+            return await api.post('/worker/payouts', { amountCents });
         },
         onSuccess: (data: any) => {
             queryClient.invalidateQueries({ queryKey: ['worker', 'wallet'] });

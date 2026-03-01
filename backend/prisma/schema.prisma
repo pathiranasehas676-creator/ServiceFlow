@@ -23,11 +23,41 @@ enum UserRole {
   ADMIN
 }
 
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BLACKLISTED
+}
+
 enum VerificationStatus {
   NOT_SUBMITTED
   PENDING
   APPROVED
   REJECTED
+}
+
+enum JobPaymentType {
+  FIXED
+  HOURLY
+}
+
+enum JobPriority {
+  NORMAL
+  HIGH
+  URGENT
+  LOW
+}
+
+enum ProofPolicyType {
+  REQUIRED
+  OPTIONAL
+  NONE
+}
+
+enum JobPostMode {
+  PUBLIC
+  PRIVATE
+  DIRECT_ASSIGN
 }
 
 enum JobStatus {
@@ -37,47 +67,40 @@ enum JobStatus {
   PROOF_SUBMITTED
   APPROVED
   COMPLETED
-  CANCELLED
-}
-
-enum TransactionType {
-  CREDIT
-  DEBIT
-  REFUND
-  ADJUSTMENT
-}
-
-enum PayoutStatus {
-  PENDING
-  APPROVED
-  PROCESSING
-  PAID
   REJECTED
-  FAILED
+  CANCELLED
+  PENDING_PAYMENT
+  PENDING_CUSTOMER_CONFIRMATION
 }
 
-enum TicketStatus {
+enum JobCancelReason {
+  WORKER_NO_SHOW
+  CLIENT_CANCELLED
+  WORKER_CANCELLED
+  ADMIN_CANCELLED
+  OTHER
+  NO_SHOW // Alias for WORKER_NO_SHOW or distinct? Treating as distinct based on usage
+}
+
+enum DisputeStatus {
   OPEN
-  IN_PROGRESS
+  IN_REVIEW
   RESOLVED
   CLOSED
+  REJECTED
 }
 
-enum TicketPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
+enum DisputeResolution {
+  REFUND
+  RELEASE_PAYMENT
+  SPLIT
 }
 
-enum NotificationType {
-  JOB_ASSIGNED
-  PROOF_DECISION
-  PAYOUT_STATUS
-  COMMENT_REPLY
-  ADMIN_ALERT_SECURITY
-  SESSION_REVOKED
-  PASSWORD_CHANGED
+enum ProofType {
+  GENERAL
+  BEFORE
+  AFTER
+  GPS
 }
 
 enum AuditAction {
@@ -100,17 +123,123 @@ enum AuditAction {
   VERIFICATION_APPROVED
   VERIFICATION_REJECTED
   RISK_FLAGGED
+  JOB_CREATE
+  JOB_UPDATE
+  JOB_DELETE
+  JOB_CANCEL
+  DISPUTE_OPEN
+  DISPUTE_RESOLVE
+  STAFF_PERMISSIONS_UPDATE
+  PERMISSION_OVERRIDE_UPDATE
+  USER_SUSPEND
+  USER_UNSUSPEND
+  USER_BLACKLIST
+  BANK_UPDATE
+  INVITE_SENT
+  REQUEST_ACCESS
+}
+
+enum TransactionType {
+  EARNING
+  PAYOUT
+  ADJUSTMENT
+  DEPOSIT
+  CREDIT
+  DEBIT
+  JOB_CREDIT
+  
+  // Restored
+  REFUND
+  HOLD
+  RELEASE
+  JOB_DEBIT
+  FEE_CHARGE
+  FEE_REFUND
+  LATE_CANCEL_FEE
+}
+
+enum PayoutStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+  PROCESSING
+  FAILED // Restored
+}
+
+
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+  URGENT // Restored
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ERROR
+  SUCCESS
+  JOB_ASSIGNED
+  JOB_UPDATE
+  JOB_CANCELLED
+  PROOF_DECISION
+  PAYOUT_UPDATE
+  VERIFICATION_UPDATE
+  DISPUTE_OPENED
+  TICKET_UPDATE
+  
+  // Added from Errors
+  NEW_JOB_POSTED
+  PAYOUT_STATUS
+  DISPUTE_RESOLVED
+  PASSWORD_CHANGED
+  SESSION_REVOKED
+  COMMENT_REPLY
+  DISPUTE_MESSAGE
+  
+  // Restored
+  ADMIN_ALERT_SECURITY
+  VERIFICATION_STATUS
+}
+
+enum PermissionOverrideMode {
+  GRANT
+  DENY
+  REVOKE // Restored
 }
 
 enum FilePurpose {
   ID_FRONT
   ID_BACK
+  ID_SELFIE
+  ID_LIVENESS
   JOB_PROOF
   PAYOUT_RECEIPT
   PROFILE_PHOTO
+  DISPUTE_ATTACHMENT
+  OTHER
 }
 
-// ... (enums and existing models)
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum InviteDeliveryMethod {
+  WHATSAPP
+  EMAIL
+}
 
 model User {
   id                  String    @id @default(uuid()) @db.Uuid
@@ -119,6 +248,7 @@ model User {
   passwordHash        String    @db.VarChar(255)
   fullName            String    @db.VarChar(255)
   role                UserRole  @default(USER)
+  status              UserStatus @default(ACTIVE)
   
   // Security
   isTwoFactorEnabled  Boolean   @default(false)
@@ -128,6 +258,8 @@ model User {
   // Soft delete
   isActive            Boolean   @default(true)
   deletedAt           DateTime?
+  deletedById         String?   @db.Uuid
+  deleteReason        String?   @db.Text
   
   // Timestamps
   createdAt           DateTime  @default(now())
@@ -151,7 +283,7 @@ model User {
   emailVerifiedAt     DateTime?
   verificationTokens  VerificationToken[]
   securityAlerts      SecurityAlert[]
-
+  permissions         UserPermission[]
   
   // KYC & Risk
   verificationLevel   Int       @default(0) // 0=None, 1=Email, 2=Identity, 3=Bank
@@ -164,61 +296,124 @@ model User {
   // Payment Administration
   approvedJobPayments JobPayment[]     @relation("PaymentApprover")
   paidJobPayments     JobPayment[]     @relation("PaymentPayer")
+  apiRequestLogs      ApiRequestLog[]
+  errorLogs           ErrorLog[]
+
+  openedDisputes      Dispute[]        @relation("DisputeOpener")
+  reviewedDisputes    Dispute[]        @relation("DisputeReviewer")
+  disputeMessages     DisputeMessage[]
+  
+  // Financial
+  paymentSessions     PaymentSession[]
+  stripeCustomerId    String?          @db.VarChar(255)
+  
+  bankDetailsChanges  BankDetailsHistory[] @relation("BankHistoryActor")
+  
+  // Registration & Invites
+  reviewedRequests    RegistrationRequest[] @relation("RequestReviewer")
+  createdInvites      InviteToken[]         @relation("InviteCreator")
 
   @@index([email])
   @@index([role, isActive])
+  @@index([status])
   @@index([verificationLevel])
   @@index([verificationScore])
   @@map("users")
 }
 
-model UserSession {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique @db.VarChar(500)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+model ErrorLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  severity    String   @default("high") @db.VarChar(20) // low, medium, high, critical
+  source      String   @default("backend") @db.VarChar(50)
+  message     String   @db.Text
+  stack       String?  @db.Text
+  path        String?  @db.VarChar(500)
+  method      String?  @db.VarChar(10)
   
+  userId      String?  @db.Uuid
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  ipAddress   String?  @db.VarChar(45)
+  userAgent   String?  @db.Text
+  safePayload Json?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([severity, createdAt])
+  @@index([source])
+  @@index([userId])
+  @@map("error_logs")
+}
+
+model UserSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  rotatedToId      String?
+  lastUsedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
   @@index([userId])
   @@map("user_sessions")
 }
 
 model TwoFactorChallenge {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  code      String   @db.VarChar(10)
-  expiresAt DateTime
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  otpHash       String
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  attemptsCount Int       @default(0)
+  createdAt     DateTime  @default(now())
+
   @@index([userId])
   @@map("two_factor_challenges")
 }
 
 model PasswordResetToken {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique @db.VarChar(255)
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
   expiresAt DateTime
-  createdAt DateTime @default(now())
-  
+  usedAt    DateTime?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
   @@index([userId])
   @@map("password_reset_tokens")
 }
 
 model VerificationToken {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique @db.VarChar(255)
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
   expiresAt DateTime
-  createdAt DateTime @default(now())
-  
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
   @@index([userId])
   @@map("verification_tokens")
+}
+
+model LoginAttempt {
+  id          String   @id @default(uuid()) @db.Uuid
+  email       String
+  ipAddress   String
+  success     Boolean
+  attemptedAt DateTime @default(now())
+
+  @@index([email])
+  @@index([ipAddress])
+  @@map("login_attempts")
 }
 
 model VerificationHistory {
@@ -255,6 +450,7 @@ model BankDetails {
   // Encrypted account number (AES-256-GCM)
   encryptedAccountNumber String    @db.Text
   accountNumberIV        String    @db.VarChar(255)
+  accountNumberAuthTag   String?   @db.VarChar(255) // Mandator for GCM
   accountNumberLast4     String    @db.VarChar(4)
   encryptionVersion      Int       @default(1)
   
@@ -267,14 +463,42 @@ model BankDetails {
   
   // Verification
   isVerified        Boolean       @default(false)
-  verifiedAt        DateTime?
+  verifiedAt            DateTime?
+  hmacSignature         String?        @db.Text
   bankVerifiedAt    DateTime?     // Explicit KYC verification timestamp
   
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   
+  // Soft delete
+  deletedAt       DateTime?
+  deletedById     String?   @db.Uuid
+  deleteReason    String?   @db.Text
+  
+  history         BankDetailsHistory[]
+  
   @@index([workerProfileId])
   @@map("bank_details")
+}
+
+model BankDetailsHistory {
+  id                String       @id @default(uuid()) @db.Uuid
+  bankDetailsId     String       @db.Uuid
+  bankDetails       BankDetails  @relation(fields: [bankDetailsId], references: [id], onDelete: Cascade)
+  
+  // Snapshot of keys that changed
+  accountNumberHash String?      @db.VarChar(255)
+  accountName       String?      @db.VarChar(255)
+  bankName          String?      @db.VarChar(255)
+  
+  changedById       String?      @db.Uuid
+  changedBy         User?        @relation("BankHistoryActor", fields: [changedById], references: [id])
+  reason            String?      @db.Text
+  
+  createdAt         DateTime     @default(now())
+  
+  @@index([bankDetailsId])
+  @@map("bank_details_history")
 }
 
 model IdVerification {
@@ -290,11 +514,13 @@ model IdVerification {
   frontImageKey     String             @db.VarChar(500)
   backImageKey      String?            @db.VarChar(500)
   selfieKey         String?            @db.VarChar(500)
+  livenessKey       String?            @db.VarChar(500)
   
   // File metadata
   frontImageSize    Int?
   backImageSize     Int?
   selfieSize        Int?
+  livenessSize      Int?
   
   // Status
   status            VerificationStatus @default(PENDING)
@@ -328,6 +554,8 @@ model Service {
   
   isActive    Boolean   @default(true)
   deletedAt   DateTime?
+  deletedById String?   @db.Uuid
+  deleteReason String?  @db.Text
   
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -346,24 +574,61 @@ model Job {
   // Job details
   title           String    @db.VarChar(500)
   description     String    @db.Text
+  notes           String?   @db.Text
   serviceId       String    @db.Uuid
   service         Service   @relation(fields: [serviceId], references: [id])
   
-  // Location
-  locationLat     Decimal   @db.Decimal(10, 8)
-  locationLng     Decimal   @db.Decimal(11, 8)
-  address         String    @db.Text
-  district        String?   @db.VarChar(100)
+  // Advanced Pricing
+  paymentType     JobPaymentType @default(FIXED)
+  priceCents      Int            // worker payout for FIXED OR hourlyRateCents for HOURLY
+  hourlyRateCents Int?
+  estimatedHours  Int?
+  maxHours        Int?           // Optional cap
+  platformFeeCents Int           @default(0)
+  totalCostCents  Int            @default(0) // payout + platformFee
+  priority        JobPriority    @default(NORMAL)
+
+  // Schedule
+  executionDate   DateTime       // Using this for date
+  timeSlot        String?        @db.VarChar(100)
+  mustFinishBy    DateTime?      // Optional SLA
   
-  // Pricing (in cents)
-  priceCents      Int
+  // Arrival / Geo Settings
+  requireArrival       Boolean   @default(true)
+  geofenceRadiusM      Int       @default(150)
+  arrivalWindowMinutes Int       @default(30)
+  locationLat          Decimal   @db.Decimal(10, 8)
+  locationLng          Decimal   @db.Decimal(11, 8)
+  address              String    @db.Text
+  district             String?   @db.VarChar(100)
   
+  // Proof Policy
+  proofPolicy        ProofPolicyType @default(REQUIRED)
+  minProofImages     Int             @default(1)
+  requireBeforeAfter Boolean         @default(false)
+  requireGpsPhoto    Boolean         @default(false)
+
+  // Eligibility Filters
+  verifiedOnly       Boolean   @default(false)
+  minWorkerRating    Float?
+  districtRestricted Boolean   @default(true)
+
+  // Posting Controls
+  postMode           JobPostMode @default(PUBLIC)
+  directAssignWorkerId String?   @db.Uuid
+  notifyWorkers      Boolean     @default(false)
+
+  // Cancellation Policy
+  cancelAllowed      Boolean   @default(true)
+  cancelBeforeHours  Int       @default(2)
+  lateCancelFeeCents Int       @default(0)
+
   // Status
   status          JobStatus @default(POSTED)
   
   // Assignment
   createdBy       String    @db.Uuid
-  creator         User      @relation("JobCreator", fields: [createdBy], references: [id])
+  creator         User      @relation("JobCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   
   workerId        String?   @db.Uuid
   worker          WorkerProfile? @relation("WorkerJobs", fields: [workerId], references: [id])
@@ -373,6 +638,11 @@ model Job {
   arrivedAt       DateTime?
   completedAt     DateTime?
   cancelledAt     DateTime?
+  cancelledById   String?         @db.Uuid
+  cancelReason    JobCancelReason?
+  cancelNote      String?         @db.Text
+  cancelledFeeCents Int           @default(0)
+  disputeWindowDays Int           @default(7)
   
   // Auto-assignment tracking
   autoAssigned     Boolean   @default(false)
@@ -380,19 +650,22 @@ model Job {
   assignmentReason Json?
   
   // Arrival tracking
-  // arrivedAt (defined above)
   arrivedLatitude       Float?
   arrivedLongitude      Float?
   arrivalDistanceMeters Int?
+  arrivalIp             String?   @db.VarChar(45)
+  arrivalUserAgent      String?   @db.Text
+  arrivalAccuracyMeters Int?
+  arrivalIsMock         Boolean   @default(false)
 
-  // Auto-assignment tracking
-  
   // Proof & rejection
   rejectionReason String?   @db.Text
   resubmitDeadline DateTime?
   
   // Soft delete
   deletedAt       DateTime?
+  deletedById     String?   @db.Uuid
+  deleteReason    String?   @db.Text
   
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -400,17 +673,100 @@ model Job {
   // Relations
   statusHistory   JobStatusHistory[]
   proofs          JobProof[]
+  attachments     JobAttachment[]
   fileObjects     FileObject[]
   rating          Rating?
   payment         JobPayment?
+  paymentSession  PaymentSession?
   comments        JobComment[]
+  disputes        Dispute[]
   
   @@index([status, createdAt])
+  @@index([postMode, status])
   @@index([serviceId, status])
   @@index([workerId, status])
   @@index([district, status])
   @@index([createdBy])
+  @@index([executionDate])
   @@map("jobs")
+}
+
+model Dispute {
+  id                String            @id @default(uuid()) @db.Uuid
+  jobId             String            @db.Uuid
+  job               Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  openedById        String            @db.Uuid
+  openedBy          User              @relation("DisputeOpener", fields: [openedById], references: [id])
+  
+  status            DisputeStatus     @default(OPEN)
+  reason            String            @db.Text
+  
+  resolution        DisputeResolution?
+  resolutionNote    String?           @db.Text
+  
+  reviewedById      String?           @db.Uuid
+  reviewedBy        User?             @relation("DisputeReviewer", fields: [reviewedById], references: [id])
+  
+  resolutionTransactionId String?     @db.Uuid // For idempotency
+  
+  resolvedAt        DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  messages          DisputeMessage[]
+  attachments       DisputeAttachment[]
+  
+  @@index([status, createdAt])
+  @@index([jobId])
+  @@map("disputes")
+}
+
+model DisputeMessage {
+  id                String            @id @default(uuid()) @db.Uuid
+  disputeId         String            @db.Uuid
+  dispute           Dispute           @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  
+  senderId          String            @db.Uuid
+  sender            User              @relation(fields: [senderId], references: [id])
+  
+  message           String            @db.Text
+  createdAt         DateTime          @default(now())
+  
+  @@index([disputeId, createdAt])
+  @@map("dispute_messages")
+}
+
+model DisputeAttachment {
+  id                String            @id @default(uuid()) @db.Uuid
+  disputeId         String            @db.Uuid
+  dispute           Dispute           @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  
+  fileKey           String            @db.VarChar(500)
+  mimeType          String            @db.VarChar(100)
+  size              Int
+  originalName      String            @db.VarChar(255)
+  
+  createdAt         DateTime          @default(now())
+  
+  @@index([disputeId])
+  @@map("dispute_attachments")
+}
+
+model JobAttachment {
+  id           String    @id @default(uuid()) @db.Uuid
+  jobId        String    @db.Uuid
+  job          Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  fileKey      String    @db.VarChar(500)
+  mimeType     String    @db.VarChar(100)
+  size         Int
+  originalName String    @db.VarChar(255)
+  
+  createdAt    DateTime  @default(now())
+
+  @@index([jobId])
+  @@map("job_attachments")
 }
 
 model JobStatusHistory {
@@ -441,6 +797,8 @@ model JobProof {
   imageUrl      String?   @db.VarChar(1000)
   mimeType      String    @db.VarChar(100)
   fileSizeBytes Int
+  
+  proofType     ProofType @default(GENERAL)
   
   // Metadata
   caption       String?   @db.Text
@@ -502,6 +860,10 @@ model WorkerPerformance {
   totalJobs          Int           @default(0)
   onTimeArrivals     Int           @default(0)
   avgArrivalDelayMinutes Float     @default(0)
+
+  cancellationCount  Int           @default(0)
+  noShowCount        Int           @default(0)
+  reliabilityScore   Float         @default(100.0)
   
   updatedAt          DateTime      @updatedAt
   
@@ -521,6 +883,7 @@ model Wallet {
   availableBalanceCents Int            @default(0)
   pendingBalanceCents   Int            @default(0)
   totalEarnedCents      Int            @default(0)
+  hmacSignature         String?        @db.Text
   
   // Metadata
   currency            String           @default("USD") @db.VarChar(3)
@@ -559,6 +922,7 @@ model Transaction {
   
   description     String          @db.Text
   metadata        Json?
+  hmacSignature   String?         @db.Text
   
   idempotencyKey  String          @unique @db.VarChar(255)
   
@@ -595,6 +959,7 @@ model PayoutRequest {
   
   // Processing
   transactionRef  String?       @db.VarChar(255)
+  paymentReference String?      @db.VarChar(255)
   processedAt     DateTime?
   paidAt          DateTime?
   
@@ -603,10 +968,16 @@ model PayoutRequest {
   
   // Relations
   receipt         PayoutReceipt?
+  statusHistory   PayoutStatusHistory[]
   
   @@index([walletId, status])
   @@index([status, createdAt])
   @@index([type, createdAt])
+  // Soft delete
+  deletedAt       DateTime?
+  deletedById     String?   @db.Uuid
+  deleteReason    String?   @db.Text
+  
   @@map("payout_requests")
 }
 
@@ -629,6 +1000,61 @@ model PayoutReceipt {
   @@map("payout_receipts")
 }
 
+model PaymentSession {
+  id                String   @id @default(uuid()) @db.Uuid
+  jobId             String   @unique @db.Uuid
+  job               Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  userId            String   @db.Uuid
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  stripeSessionId   String   @unique @db.VarChar(255)
+  paymentIntentId   String?  @unique @db.VarChar(255)
+  amountCents       Int
+  currency          String   @default("USD") @db.VarChar(3)
+  
+  status            String   @db.VarChar(50) // PENDING, COMPLETE, EXPIRED, FAILED
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+  @@index([stripeSessionId])
+  @@map("payment_sessions")
+}
+
+model StripeAccount {
+  id                String   @id @default(uuid()) @db.Uuid
+  workerProfileId   String   @unique @db.Uuid
+  workerProfile     WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  
+  stripeAccountId   String   @unique @db.VarChar(255)
+  detailsSubmitted  Boolean  @default(false)
+  payoutsEnabled    Boolean  @default(false)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("stripe_accounts")
+}
+
+model PayoutStatusHistory {
+  id              String        @id @default(uuid()) @db.Uuid
+  payoutRequestId String        @db.Uuid
+  payoutRequest   PayoutRequest @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
+  
+  fromStatus      PayoutStatus?
+  toStatus        PayoutStatus
+  
+  actorId         String        @db.Uuid
+  reason          String?       @db.Text
+  
+  createdAt       DateTime      @default(now())
+  
+  @@index([payoutRequestId])
+  @@map("payout_status_history")
+}
+
 // ============================================
 // SUPPORT & NOTIFICATIONS
 // ============================================
@@ -641,6 +1067,7 @@ model SupportTicket {
   creator     User           @relation("TicketCreator", fields: [createdBy], references: [id])
   
   subject     String         @db.VarChar(500)
+  description String?        @db.Text
   category    String?        @db.VarChar(100)
   priority    TicketPriority @default(MEDIUM)
   status      TicketStatus   @default(OPEN)
@@ -649,6 +1076,11 @@ model SupportTicket {
   
   resolvedAt  DateTime?
   closedAt    DateTime?
+
+  // Soft delete
+  deletedAt       DateTime?
+  deletedById     String?   @db.Uuid
+  deleteReason    String?   @db.Text
   
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -695,7 +1127,10 @@ model Notification {
   entityType   String?          @db.VarChar(50) // JOB, PAYOUT, TICKET
   entityId     String?          @db.Uuid
   
+  metadata     Json?
+  
   isRead       Boolean          @default(false)
+  readAt       DateTime?
   createdAt    DateTime         @default(now())
   
   @@index([userId])
@@ -712,7 +1147,7 @@ model AdminAuditLog {
   
   // Actor
   actorId     String?     @db.Uuid
-  actor       User?       @relation(fields: [actorId], references: [id])
+  actor       User?       @relation(fields: [actorId], references: [id], onDelete: Cascade)
   actorEmail  String?     @db.VarChar(255) // Denormalized for history
   
   // Action
@@ -785,12 +1220,31 @@ model SecurityAlert {
 
 model Permission {
   id          String   @id @default(uuid()) @db.Uuid
-  name        String   @unique @db.VarChar(100) // e.g. "APPROVE_PAYOUT"
+  code        String   @unique @db.VarChar(100) // key e.g. "CREATE_JOBS"
+  name        String   @db.VarChar(100)        // Human label
+  group       String   @db.VarChar(50)         // Category: e.g. "Jobs", "Finance"
   description String?  @db.Text
+  createdAt   DateTime @default(now())
   
-  roles       RolePermission[]
+  roles     RolePermission[]
+  users     UserPermission[]
   
   @@map("permissions")
+}
+
+model UserPermission {
+  id           String     @id @default(uuid()) @db.Uuid
+  userId       String     @db.Uuid
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String     @db.Uuid
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  mode         PermissionOverrideMode @default(GRANT)
+  
+  createdAt    DateTime   @default(now())
+  
+  @@unique([userId, permissionId])
+  @@map("user_permissions")
 }
 
 enum JobPaymentStatus {
@@ -849,11 +1303,30 @@ model WorkerProfile {
   userId            String    @unique @db.Uuid
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  fullName          String?   @db.VarChar(255)
+  nicNumber         String?   @db.VarChar(50)
+  documentType      String?   @db.VarChar(50) // e.g., "NATIONAL_ID", "PASSPORT"
+  address           String?   @db.Text
   bio               String?   @db.Text
   skills            Json?
   hourlyRateCents   Int?
+  profilePhotoFileKey String? @db.VarChar(500)
   
   verificationStatus VerificationStatus @default(NOT_SUBMITTED)
+  profileCompleted   Boolean            @default(false)
+  completionScore    Int                @default(0) // 0-100
+  missingProfileItems Json?
+  lastComputedAt     DateTime?
+  isOnline           Boolean            @default(false)
+
+  isSuspended        Boolean            @default(false)
+  suspendedAt        DateTime?
+  suspensionReason   String?            @db.Text
+  
+  // Soft delete
+  deletedAt       DateTime?
+  deletedById     String?   @db.Uuid
+  deleteReason    String?   @db.Text
   
   // Relations
   bankDetails       BankDetails?
@@ -862,11 +1335,63 @@ model WorkerProfile {
   ratings           Rating[]         @relation("WorkerRatings")
   performance       WorkerPerformance?
   jobPayments       JobPayment[]
+  stripeAccount     StripeAccount?
 
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   
   @@map("worker_profiles")
+}
+
+model RegistrationRequest {
+  id           String             @id @default(uuid()) @db.Uuid
+  fullName     String             @db.VarChar(255)
+  email        String             @db.VarChar(255) // normalized lowercase in app logic, but stored here
+  phone        String             @db.VarChar(20)
+  nic          String?            @db.VarChar(50)
+  status       RegistrationStatus @default(PENDING)
+  
+  reviewedById String?            @db.Uuid
+  reviewedBy   User?              @relation("RequestReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewReason String?            @db.Text
+  
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  inviteToken  InviteToken?
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@index([phone])
+  @@map("registration_requests")
+}
+
+model InviteToken {
+  id             String              @id @default(uuid()) @db.Uuid
+  requestId      String              @unique @db.Uuid
+  request        RegistrationRequest @relation(fields: [requestId], references: [id])
+  
+  email          String              @db.VarChar(255)
+  phone          String              @db.VarChar(20)
+  
+  tokenHash      String              @db.VarChar(255)
+  expiresAt      DateTime
+  usedAt         DateTime?
+  
+  deliveryMethod InviteDeliveryMethod
+  sentAt         DateTime?
+  
+  createdById    String              @db.Uuid
+  createdBy      User                @relation("InviteCreator", fields: [createdById], references: [id])
+  
+  createdAt      DateTime            @default(now())
+
+  @@index([requestId])
+  @@index([expiresAt])
+  @@index([usedAt])
+  @@index([deliveryMethod])
+  @@map("invite_tokens")
 }
 
 model FileObject {
@@ -897,4 +1422,38 @@ model FileObject {
   
   @@index([uploadedBy])
   @@map("file_objects")
+}
+
+model ApiRequestLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  method      String   @db.VarChar(10)
+  path        String   @db.VarChar(500)
+  statusCode  Int
+  durationMs  Int
+  
+  role        String?  @db.VarChar(50)
+  userId      String?  @db.Uuid
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  ipAddress   String?  @db.VarChar(45)
+  userAgent   String?  @db.Text
+  
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([path])
+  @@index([statusCode])
+  @@index([userId])
+  @@map("api_request_logs")
+}
+
+model BlockedIp {
+  id          String   @id @default(uuid()) @db.Uuid
+  ipAddress   String   @unique @db.VarChar(45)
+  reason      String   @db.Text
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([ipAddress])
+  @@map("blocked_ips")
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { JobPayment } from '@/lib/types/payment';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -19,11 +19,11 @@ export default function AdminJobPaymentsPage() {
     const queryClient = useQueryClient();
     const { data: payments, isLoading } = useQuery<JobPayment[]>({
         queryKey: ['admin', 'job-payments'],
-        queryFn: async () => apiClient.get('/admin/job-payments').then(res => res.data)
+        queryFn: async () => api.get('/admin/job-payments')
     });
 
     const { mutate: markPaid } = useMutation({
-        mutationFn: async (id: string) => apiClient.patch(`/admin/job-payments/${id}/pay`),
+        mutationFn: async (id: string) => api.patch(`/admin/job-payments/${id}/pay`),
         onSuccess: () => {
             toast.success("Payment marked as PAID");
             queryClient.invalidateQueries({ queryKey: ['admin', 'job-payments'] });

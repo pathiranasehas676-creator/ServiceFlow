@@ -2,12 +2,9 @@
 
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ProofApprovalsTab } from '@/components/admin/requests/proof-approvals-tab';
-import { PayoutRequestsTab } from '@/components/admin/requests/payout-requests-tab';
-import { VerificationRequestsTab } from '@/components/admin/requests/verification-requests-tab';
-import { SupportTicketsTab } from '@/components/admin/requests/support-tickets-tab';
-import { BankVerificationsTab } from '@/components/admin/requests/bank-verifications-tab';
-import { FileCheck, DollarSign, ShieldCheck, MessageSquare, Building } from 'lucide-react';
+import { ProofApprovalsTab, PayoutRequestsTab, VerificationRequestsTab, SupportTicketsTab, BankVerificationsTab, DisputesTab, RegistrationRequestsTab } from '@/components/admin/requests';
+import { FileCheck, DollarSign, ShieldCheck, MessageSquare, Building, Scale, UserPlus } from 'lucide-react';
+
 
 export default function RequestsPage() {
     const [activeTab, setActiveTab] = useState('proofs');
@@ -22,7 +19,12 @@ export default function RequestsPage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid h-auto p-1">
+                <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 lg:w-auto lg:inline-grid h-auto p-1 bg-slate-100/50 rounded-2xl">
+                    <TabsTrigger value="registrations" className="gap-2 py-2">
+                        <UserPlus className="h-4 w-4" />
+                        <span className="hidden sm:inline">Registrations</span>
+                        <span className="sm:hidden">Join</span>
+                    </TabsTrigger>
                     <TabsTrigger value="proofs" className="gap-2 py-2">
                         <FileCheck className="h-4 w-4" />
                         <span className="hidden sm:inline">Proof Approvals</span>
@@ -48,7 +50,16 @@ export default function RequestsPage() {
                         <span className="hidden sm:inline">Support Tickets</span>
                         <span className="sm:hidden">Tickets</span>
                     </TabsTrigger>
+                    <TabsTrigger value="disputes" className="gap-2 py-2">
+                        <Scale className="h-4 w-4" />
+                        <span className="hidden sm:inline">Job Disputes</span>
+                        <span className="sm:hidden">Disputes</span>
+                    </TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="registrations" className="space-y-4">
+                    <RegistrationRequestsTab />
+                </TabsContent>
 
                 <TabsContent value="proofs" className="space-y-4">
                     <ProofApprovalsTab />
@@ -68,6 +79,10 @@ export default function RequestsPage() {
 
                 <TabsContent value="tickets" className="space-y-4">
                     <SupportTicketsTab />
+                </TabsContent>
+
+                <TabsContent value="disputes" className="space-y-4">
+                    <DisputesTab />
                 </TabsContent>
             </Tabs>
         </div>

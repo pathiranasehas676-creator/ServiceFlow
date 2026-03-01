@@ -62,11 +62,10 @@ export class PayoutScheduler {
         // PayoutsService.requestPayout creates PayoutRequest with "SPECIAL" type default.
         // I need to override type to "WEEKLY".
 
-        await this.payoutsService.requestPayout(
-          wallet.userId,
-          wallet.availableBalanceCents,
-          'WEEKLY',
-        );
+        await this.payoutsService.requestPayout(wallet.userId, {
+          amountCents: wallet.availableBalanceCents,
+          type: 'WEEKLY' as any, // Cast or import PayoutType
+        });
         processed++;
       } catch (e: any) {
         this.logger.error(

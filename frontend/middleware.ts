@@ -4,8 +4,8 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
-    // Check if accessing admin routes
-    if (pathname.startsWith('/admin')) {
+    // Check if accessing admin or staff routes
+    if (pathname.startsWith('/admin') || pathname.startsWith('/staff')) {
         // Get auth state from cookie or header
         // Note: Since we're using in-memory tokens, we'll check on the client side
         // This middleware primarily handles redirects for unauthenticated users
@@ -32,9 +32,14 @@ export function middleware(request: NextRequest) {
 
             // Check if user has admin or staff role
             const userRole = authState.state?.user?.role;
-            if (userRole !== 'ADMIN' && userRole !== 'STAFF') {
+            if (pathname.startsWith('/admin') && userRole !== 'ADMIN' && userRole !== 'STAFF') {
                 return NextResponse.redirect(new URL('/not-authorized', request.url));
             }
+
+            if (pathname.startsWith('/staff') && userRole !== 'STAFF' && userRole !== 'ADMIN') {
+                return NextResponse.redirect(new URL('/not-authorized', request.url));
+            }
+
         } catch (error) {
             // Invalid auth cookie
             const loginUrl = new URL('/auth/login', request.url);
@@ -49,6 +54,7 @@ export function middleware(request: NextRequest) {
 export const config = {
     matcher: [
         '/admin/:path*',
+        '/staff/:path*',
         // Add other protected routes here
     ],
 };

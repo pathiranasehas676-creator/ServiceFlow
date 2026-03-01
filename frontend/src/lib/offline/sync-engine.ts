@@ -1,10 +1,9 @@
 import { queueDb } from './queue-db';
 import { queueService } from './queue-service';
-import { apiClient } from '@/lib/api-client';
+import { api, ApiError } from '@/lib/apiClient';
 import { QueueItem } from './queue-types';
 
 let isSyncing = false;
-let syncTimeout: NodeJS.Timeout | null = null;
 
 export async function processQueue() {
     if (isSyncing || !navigator.onLine) return;
@@ -15,15 +14,13 @@ export async function processQueue() {
         const pending = await queueDb.getPending();
 
         for (const item of pending) {
-            // Exponential backoff check
-            const waitTime = Math.pow(2, item.retryCount) * 1000;
-            const lastAttempt = new Date(item.createdAt).getTime(); // Not exactly last attempt, but good enough for now
-            // Realistically I should track lastAttemptAt
+            // Exponential backoff check (simple version)
+            // const waitTime = Math.pow(2, item.retryCount) * 1000;
+            // const lastAttempt = new Date(item.createdAt).getTime();
 
             try {
                 await queueService.markSending(item.id);
 
-                let response;
                 const config = {
                     headers: {
                         'X-Idempotency-Key': item.idempotencyKey
@@ -32,32 +29,41 @@ export async function processQueue() {
 
                 switch (item.type) {
                     case 'PROOF_SUBMIT':
-                        response = await apiClient.post(`/jobs/${item.payload.jobId}/proof/submit`, {
+                        await api.post(`/jobs/${item.payload.jobId}/proof/submit`, {
                             proofs: item.payload.proofs
                         }, config);
                         break;
 
                     case 'PAYOUT_REQUEST':
-                        response = await apiClient.post('/worker/payouts', {
+                        await api.post('/worker/payouts', {
                             amountCents: item.payload.amountCents
                         }, config);
                         break;
 
                     case 'TICKET_MESSAGE':
-                        response = await apiClient.post(`/support/tickets/${item.payload.ticketId}/messages`, {
+                        await api.post(`/support/tickets/${item.payload.ticketId}/messages`, {
                             message: item.payload.message
+                        }, config);
+                        break;
+
+                    case 'JOB_ARRIVE' as any:
+                        await api.post(`/jobs/${item.payload.jobId}/arrive`, {
+                            lat: item.payload.lat,
+                            lng: item.payload.lng,
+                            accuracyMeters: item.payload.accuracyMeters,
+                            isMock: item.payload.isMock
                         }, config);
                         break;
                 }
 
                 await queueService.markSent(item.id);
             } catch (err: any) {
-                const status = err.response?.status;
-                const isRetryable = status ? (status >= 500 || status === 429) : true;
+                const status = err instanceof ApiError ? err.status : (err.response?.status || 500);
+                const isRetryable = status >= 500 || status === 429;
 
                 await queueService.markFailed(
                     item.id,
-                    err.response?.data?.message || err.message,
+                    err.message || 'Unknown error',
                     isRetryable
                 );
 

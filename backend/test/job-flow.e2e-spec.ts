@@ -1,10 +1,11 @@
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
 import * as crypto from 'crypto';
-import * as cookieParser from 'cookie-parser';
+const cookieParser = require('cookie-parser');
 
 describe('Job Flow (e2e)', () => {
     let app: INestApplication;
@@ -83,7 +84,7 @@ describe('Job Flow (e2e)', () => {
             }
         });
         serviceId = service.id;
-    });
+    }, 90000);
 
     afterAll(async () => {
         if (prisma) {

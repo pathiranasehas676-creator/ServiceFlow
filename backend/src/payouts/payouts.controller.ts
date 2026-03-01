@@ -1,72 +1,108 @@
 import {
   Controller,
   Post,
-  Patch,
   Body,
-  Param,
   UseGuards,
+  Req,
   Get,
+  Param,
+  Query,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PayoutsService } from './payouts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
-import { GetUser } from '../auth/decorators/get-user.decorator';
-import { CsrfGuard } from '../auth/guards/csrf.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Permissions } from '../common/decorators/permissions.decorator';
+import {
+  CreatePayoutRequestDto,
+  RejectPayoutDto,
+  MarkPaidDto,
+} from './dto/payouts.dto';
 
-@Controller('admin/payouts')
-@UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
-@Roles(UserRole.ADMIN)
+@ApiTags('payouts')
+@Controller('payouts')
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@ApiBearerAuth()
 export class PayoutsController {
-  constructor(private readonly payoutsService: PayoutsService) { }
+  constructor(private readonly payoutsService: PayoutsService) {}
 
-  @Patch(':id/approve')
-  async approve(@Param('id') id: string, @GetUser() user: any) {
-    return this.payoutsService.approvePayout(id, user.id);
+  // --- WORKER ENDPOINTS ---
+
+  @Post('request')
+  @Roles('WORKER')
+  @ApiOperation({ summary: 'Request a payout' })
+  async requestPayout(@Req() req: any, @Body() dto: CreatePayoutRequestDto) {
+    return this.payoutsService.requestPayout(req.user.userId, dto);
   }
 
-  @Patch(':id/reject')
-  async reject(
+  @Get('my-history')
+  @Roles('WORKER')
+  @ApiOperation({ summary: 'Get payout history' })
+  async getMyHistory(@Req() req: any, @Query() query: any) {
+    return this.payoutsService.findAll({ ...query, userId: req.user.userId });
+  }
+
+  @Get(':id')
+  @Roles('WORKER', 'ADMIN', 'STAFF')
+  @ApiOperation({ summary: 'Get payout details' })
+  async getPayout(@Param('id') id: string, @Req() req: any) {
+    const isAdmin = ['ADMIN', 'STAFF'].includes(req.user.role);
+    return this.payoutsService.getPayout(id, req.user.userId, isAdmin);
+  }
+
+  // --- ADMIN ENDPOINTS ---
+
+  @Get('admin/all')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('VIEW_FINANCE_DASHBOARD')
+  @ApiOperation({ summary: 'List all payout requests' })
+  async getAllPayouts(@Query() query: any) {
+    return this.payoutsService.findAll(query);
+  }
+
+  @Post('admin/:id/approve')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('PROCESS_PAYOUTS')
+  @ApiOperation({ summary: 'Approve a payout request' })
+  async approvePayout(@Param('id') id: string, @Req() req: any) {
+    return this.payoutsService.approvePayout(id, req.user.userId);
+  }
+
+  @Post('admin/:id/reject')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('PROCESS_PAYOUTS')
+  @ApiOperation({ summary: 'Reject a payout request' })
+  async rejectPayout(
     @Param('id') id: string,
-    @Body('reason') reason: string,
-    @GetUser() user: any,
+    @Body() dto: RejectPayoutDto,
+    @Req() req: any,
   ) {
-    return this.payoutsService.rejectPayout(id, reason, user.id);
+    return this.payoutsService.rejectPayout(id, req.user.userId, dto);
   }
 
-  @Patch(':id/pay')
+  @Post('admin/:id/receipt/presign')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('PROCESS_PAYOUTS')
+  @ApiOperation({ summary: 'Get presigned URL for receipt upload' })
+  async presignReceipt(
+    @Param('id') id: string,
+    @Body() body: { mimeType: string; size: number },
+    @Req() req: any,
+  ) {
+    return this.payoutsService.presignReceipt(id, req.user.userId, body);
+  }
+
+  @Post('admin/:id/mark-paid')
+  @Roles('ADMIN', 'STAFF')
+  @Permissions('PROCESS_PAYOUTS')
+  @ApiOperation({ summary: 'Mark payout as paid and attach receipt' })
   async markPaid(
     @Param('id') id: string,
-    @GetUser() user: any,
-    @Body('receipt') receiptUrl: string, // Or receipt ID/Key
+    @Body() dto: MarkPaidDto,
+    @Req() req: any,
   ) {
-    return this.payoutsService.markPaid(id, user.id, receiptUrl);
-  }
-
-  @Get()
-  async findAll() {
-    return this.payoutsService.findAll({});
-  }
-}
-
-// Separate controller for Worker
-@Controller('worker/payouts')
-@UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
-@Roles(UserRole.WORKER)
-export class WorkerPayoutsController {
-  constructor(private readonly payoutsService: PayoutsService) { }
-
-  @Get()
-  async getMyPayouts(@GetUser() user: any) {
-    return this.payoutsService.getPayoutsByUser(user.id);
-  }
-
-  @Post()
-  async request(
-    @Body('amountCents') amountCents: number,
-    @GetUser() user: any,
-  ) {
-    return this.payoutsService.requestPayout(user.id, amountCents);
+    return this.payoutsService.markPaid(id, req.user.userId, dto);
   }
 }

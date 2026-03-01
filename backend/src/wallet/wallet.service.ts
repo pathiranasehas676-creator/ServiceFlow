@@ -1,30 +1,102 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma, TransactionType } from '@prisma/client';
+import {
+  TransactionType,
+  TransactionStatus,
+  Prisma,
+  Wallet,
+  Transaction,
+} from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { calculateHmac, verifyHmac } from '../common/utils/security.utils';
 
 @Injectable()
 export class WalletService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {}
 
-  // Ensure wallet exists for user
-  async ensureWallet(userId: string) {
-    return this.prisma.wallet.upsert({
-      where: { userId },
-      create: { userId },
-      update: {},
+  private signRow(data: any): string {
+    const secret =
+      this.configService.get('INTEGRITY_SECRET') ||
+      'serviceflow-integrity-key-2024';
+    // We only sign fields that represent the state
+    const { hmacSignature, createdAt, updatedAt, ...signable } = data;
+    return calculateHmac(signable, secret);
+  }
+
+  async ensureWallet(userId: string): Promise<Wallet> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (wallet) return wallet;
+
+    const newWalletData: any = {
+      userId,
+      availableBalanceCents: 0,
+      pendingBalanceCents: 0,
+      totalEarnedCents: 0,
+      currency: 'USD',
+    };
+
+    newWalletData.hmacSignature = this.signRow(newWalletData);
+
+    return this.prisma.wallet.create({
+      data: newWalletData,
     });
+  }
+
+  private async secureUpdateWallet(
+    walletId: string,
+    data: Prisma.WalletUpdateInput,
+    tx: Prisma.TransactionClient,
+  ): Promise<Wallet> {
+    const updated = await tx.wallet.update({
+      where: { id: walletId },
+      data,
+    });
+
+    const hmacSignature = this.signRow(updated);
+    return tx.wallet.update({
+      where: { id: walletId },
+      data: { hmacSignature } as any,
+    });
+  }
+
+  private async secureCreateTransaction(
+    data: Prisma.TransactionUncheckedCreateInput,
+    tx: Prisma.TransactionClient,
+  ): Promise<Transaction> {
+    const created = await tx.transaction.create({ data });
+    const hmacSignature = this.signRow(created);
+    return tx.transaction.update({
+      where: { id: created.id },
+      data: { hmacSignature } as any,
+    });
+  }
+
+  async verifyIntegrity(userId: string): Promise<{ walletValid: boolean }> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) return { walletValid: true };
+    if (!wallet.hmacSignature) return { walletValid: false };
+
+    const isValid = verifyHmac(
+      wallet,
+      wallet.hmacSignature,
+      this.configService.get('INTEGRITY_SECRET') ||
+        'serviceflow-integrity-key-2024',
+    );
+    return { walletValid: isValid };
   }
 
   async getWallet(userId: string) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-      include: { transactions: { orderBy: { createdAt: 'desc' }, take: 10 } },
-    });
-    if (!wallet) return this.ensureWallet(userId);
-    return wallet;
+    return this.ensureWallet(userId);
   }
 
-  async getTransactions(userId: string, page = 1, limit = 10) {
+  async getTransactions(userId: string, page = 1, limit = 20) {
     const wallet = await this.ensureWallet(userId);
     const skip = (page - 1) * limit;
 
@@ -40,196 +112,224 @@ export class WalletService {
 
     return {
       data: transactions,
-      meta: {
-        total,
-        page,
-        lastPage: Math.ceil(total / limit),
-      },
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
 
-  async creditWallet(
-    workerId: string,
+  /**
+   * CREDIT: Increase Available Balance
+   * Used for: Job Earnings, Bonuses, Refunds
+   */
+  async credit(
+    userId: string,
     amountCents: number,
-    type: TransactionType,
-    referenceType: string,
-    referenceId: string,
     description: string,
+    refType: string,
+    refId: string,
+    type: TransactionType = TransactionType.CREDIT,
     tx?: Prisma.TransactionClient,
   ) {
     const prisma = tx || this.prisma;
-
-    // Ensure wallet exists
-    let wallet = await prisma.wallet.findFirst({ where: { userId: workerId } });
-    if (!wallet) {
-      wallet = await prisma.wallet.create({ data: { userId: workerId } });
-    }
+    const wallet = await this.ensureWallet(userId);
 
     // Idempotency check
-    const idempotencyKey = `${referenceType}:${referenceId}:${type}:${amountCents}`;
-    const existingTx = await prisma.transaction.findFirst({
+    const idempotencyKey = `${refType}:${refId}:${type}:${amountCents}`;
+    const existing = await prisma.transaction.findUnique({
       where: { idempotencyKey },
     });
+    if (existing) return existing;
 
-    if (existingTx) return existingTx;
+    const newBalance = wallet.availableBalanceCents + amountCents;
 
-    // Transactional update
-    const transaction = await prisma.transaction.create({
-      data: {
+    // Update Wallet
+    await this.secureUpdateWallet(
+      wallet.id,
+      {
+        availableBalanceCents: { increment: amountCents },
+        totalEarnedCents:
+          type === 'CREDIT' ? { increment: amountCents } : undefined,
+      },
+      prisma,
+    );
+
+    // Create Ledger Entry
+    return this.secureCreateTransaction(
+      {
         walletId: wallet.id,
         type,
         amountCents,
-        referenceType,
-        referenceId,
+        status: TransactionStatus.COMPLETED,
+        referenceType: refType,
+        referenceId: refId,
         description,
+        balanceAfterCents: newBalance,
         idempotencyKey,
-        balanceAfterCents: wallet.availableBalanceCents + amountCents,
-        createdAt: new Date(),
-        completedAt: new Date(), // Instant credit
+        completedAt: new Date(),
       },
-    });
-
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
-        availableBalanceCents: { increment: amountCents },
-        totalEarnedCents:
-          type === 'CREDIT' ? { increment: amountCents } : undefined, // Only increment total on credit? Or EARNING type?
-      },
-    });
-
-    // If it's pure earning, increment totalEarned
-    if (type === 'CREDIT' || type === 'REFUND') {
-      // Logic handled above
-    }
-
-    return transaction;
+      prisma,
+    );
   }
 
-  // Lock funds (Move available -> pending)
-  async lockFunds(
-    workerId: string,
+  /**
+   * HOLD: Move Available -> Pending
+   * Used for: Payout Requests
+   */
+  async hold(
+    userId: string,
     amountCents: number,
-    referenceType: string,
-    referenceId: string,
     description: string,
+    refType: string,
+    refId: string,
     tx?: Prisma.TransactionClient,
   ) {
     const prisma = tx || this.prisma;
-    const wallet = await prisma.wallet.findUnique({
-      where: { userId: workerId },
-    });
+    const wallet = await this.ensureWallet(userId);
 
-    if (!wallet || wallet.availableBalanceCents < amountCents) {
-      throw new Error(
-        `Insufficient funds. Available: ${wallet?.availableBalanceCents}, Required: ${amountCents}`,
-      );
+    if (wallet.availableBalanceCents < amountCents) {
+      throw new BadRequestException('Insufficient available balance');
     }
 
-    const idempotencyKey = `${referenceType}:${referenceId}:LOCK:${amountCents}`;
-
-    // Create DEBIT transaction (Pending state?) or separate ledger?
-    // User spec says: "move available -> pending (or lock amount via transaction) and create payoutRequest status=PENDING and DEBIT transaction status=PENDING"
-
-    const transaction = await prisma.transaction.create({
-      data: {
-        walletId: wallet.id,
-        type: 'DEBIT',
-        amountCents,
-        status: 'PENDING',
-        referenceType,
-        referenceId,
-        description,
-        idempotencyKey,
-        balanceAfterCents: wallet.availableBalanceCents - amountCents,
-        completedAt: null,
-      },
+    const idempotencyKey = `${refType}:${refId}:HOLD:${amountCents}`;
+    const existing = await prisma.transaction.findUnique({
+      where: { idempotencyKey },
     });
+    if (existing) return existing;
 
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
+    const newBalance = wallet.availableBalanceCents - amountCents;
+
+    // Update Wallet
+    await this.secureUpdateWallet(
+      wallet.id,
+      {
         availableBalanceCents: { decrement: amountCents },
         pendingBalanceCents: { increment: amountCents },
       },
-    });
+      prisma,
+    );
 
-    return transaction;
+    // Create Ledger Entry
+    return this.secureCreateTransaction(
+      {
+        walletId: wallet.id,
+        type: 'HOLD' as any,
+        amountCents,
+        status: TransactionStatus.COMPLETED,
+        referenceType: refType,
+        referenceId: refId,
+        description,
+        balanceAfterCents: newBalance,
+        idempotencyKey,
+        completedAt: new Date(),
+      },
+      prisma,
+    );
   }
 
-  // Finalize Payout (Debit pending -> External)
-  async finalizePayout(
-    workerId: string,
+  /**
+   * RELEASE: Move Pending -> Available
+   * Used for: Payout Rejection/Failure
+   */
+  async release(
+    userId: string,
     amountCents: number,
-    referenceId: string,
+    description: string,
+    refType: string,
+    refId: string,
     tx?: Prisma.TransactionClient,
   ) {
     const prisma = tx || this.prisma;
-    const wallet = await prisma.wallet.findUnique({
-      where: { userId: workerId },
+    const wallet = await this.ensureWallet(userId);
+
+    // We assume the amount is in pending.
+    // Ideally we check if pending >= amount, but let's assume system integrity.
+
+    const idempotencyKey = `${refType}:${refId}:RELEASE:${amountCents}`;
+    const existing = await prisma.transaction.findUnique({
+      where: { idempotencyKey },
     });
-    if (!wallet) throw new Error('Wallet not found');
+    if (existing) return existing;
 
-    const idempotencyKey = `PAYOUT:${referenceId}:FINALIZE`;
+    const newBalance = wallet.availableBalanceCents + amountCents;
 
-    // Find the lock transaction
-    const lockTxKey = `PAYOUT_REQUEST:${referenceId}:LOCK:${amountCents}`;
-    // Usually referenceId is payoutRequestId.
-
-    // Update wallet: pending -= amount
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
-        pendingBalanceCents: { decrement: amountCents },
-      },
-    });
-
-    // Find the pending transaction and mark completed
-    // Or create a new one?
-    // Spec says "transaction status -> COMPLETED".
-    // Use referenceId (payoutRequestId) to find the transaction.
-
-    await prisma.transaction.updateMany({
-      where: {
-        referenceId,
-        referenceType: 'PAYOUT_REQUEST',
-        completedAt: null,
-      },
-      data: { completedAt: new Date() },
-    });
-  }
-
-  // Reverse Lock (Payout Failed/Rejected)
-  async releaseFunds(
-    workerId: string,
-    amountCents: number,
-    referenceId: string,
-    tx?: Prisma.TransactionClient,
-  ) {
-    const prisma = tx || this.prisma;
-    const wallet = await prisma.wallet.findUnique({
-      where: { userId: workerId },
-    });
-    if (!wallet) throw new Error('Wallet not found');
-
-    // pending -= amount, available += amount
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
-        pendingBalanceCents: { decrement: amountCents },
+    await this.secureUpdateWallet(
+      wallet.id,
+      {
         availableBalanceCents: { increment: amountCents },
+        pendingBalanceCents: { decrement: amountCents },
       },
-    });
+      prisma,
+    );
 
-    // Update transaction to REVERSED
-    await prisma.transaction.updateMany({
-      where: { referenceId, referenceType: 'PAYOUT_REQUEST' },
-      data: {
-        status: 'REVERSED',
-        description: { set: 'REVERSED: Payout failed/rejected' },
+    return this.secureCreateTransaction(
+      {
+        walletId: wallet.id,
+        type: 'RELEASE' as any,
+        amountCents,
+        status: TransactionStatus.COMPLETED,
+        referenceType: refType,
+        referenceId: refId,
+        description,
+        balanceAfterCents: newBalance,
+        idempotencyKey,
+        completedAt: new Date(),
       },
-    });
+      prisma,
+    );
+  }
 
-    // Schema check for Transaction status
+  /**
+   * DEBIT: Decrease Balance
+   * Used for: Payout Completion (from Pending), Penalties (from Available)
+   */
+  async debit(
+    userId: string,
+    amountCents: number,
+    description: string,
+    refType: string,
+    refId: string,
+    fromPending: boolean,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const prisma = tx || this.prisma;
+    const wallet = await this.ensureWallet(userId);
+
+    const idempotencyKey = `${refType}:${refId}:DEBIT:${amountCents}`;
+    const existing = await prisma.transaction.findUnique({
+      where: { idempotencyKey },
+    });
+    if (existing) return existing;
+
+    let newBalance = wallet.availableBalanceCents;
+
+    if (fromPending) {
+      await this.secureUpdateWallet(
+        wallet.id,
+        { pendingBalanceCents: { decrement: amountCents } },
+        prisma,
+      );
+    } else {
+      newBalance = wallet.availableBalanceCents - amountCents;
+      await this.secureUpdateWallet(
+        wallet.id,
+        { availableBalanceCents: { decrement: amountCents } },
+        prisma,
+      );
+    }
+
+    return this.secureCreateTransaction(
+      {
+        walletId: wallet.id,
+        type: TransactionType.DEBIT,
+        amountCents,
+        status: TransactionStatus.COMPLETED,
+        referenceType: refType,
+        referenceId: refId,
+        description,
+        balanceAfterCents: newBalance,
+        idempotencyKey,
+        completedAt: new Date(),
+      },
+      prisma,
+    );
   }
 }

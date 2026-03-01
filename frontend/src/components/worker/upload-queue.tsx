@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Upload, X, CheckCircle, FileImage, Loader2 } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 interface UploadQueueProps {
     jobId: string;
-    onUploadComplete: (urls: string[]) => void;
+    onUploadComplete: (files: { imageKey: string; mimeType: string; fileSizeBytes: number }[]) => void;
     maxFiles?: number;
 }
 
@@ -41,44 +41,73 @@ export function UploadQueue({ jobId, onUploadComplete, maxFiles = 3 }: UploadQue
 
     const startUpload = async () => {
         setIsProcessing(true);
-        const uploadedUrls: string[] = [];
+        const uploadedUrls: { imageKey: string; mimeType: string; fileSizeBytes: number }[] = [];
 
         try {
             for (let i = 0; i < files.length; i++) {
                 if (files[i].url) {
-                    uploadedUrls.push(files[i].url!);
                     continue;
                 }
 
-                // 1. Get Presigned URL
-                const fileName = `${jobId}_${Date.now()}_${files[i].file.name}`;
-                const presignRes = await apiClient.post(`/jobs/${jobId}/proof/presign`, {
-                    fileName,
-                    contentType: files[i].file.type
-                });
+                try {
+                    setFiles(prev => {
+                        const updated = [...prev];
+                        updated[i].progress = 10;
+                        return updated;
+                    });
 
-                const { uploadUrl, fileKey } = presignRes.data;
+                    // 1. Get Presigned URL
+                    const fileName = `${jobId}_${Date.now()}_${files[i].file.name}`;
+                    const presignRes = await api.post<{ uploadUrl: string; fileKey: string }>(`/jobs/${jobId}/proof/presign`, {
+                        fileName,
+                        mimeType: files[i].file.type,
+                        sizeBytes: files[i].file.size
+                    });
 
-                // 2. Upload to storage (e.g. MinIO/S3)
-                await apiClient.put(uploadUrl, files[i].file, {
-                    headers: { 'Content-Type': files[i].file.type },
-                    onUploadProgress: (progressEvent) => {
-                        const progress = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
-                        setFiles(prev => {
-                            const updated = [...prev];
-                            updated[i].progress = progress;
-                            return updated;
-                        });
+                    const { uploadUrl, fileKey } = presignRes;
+
+                    setFiles(prev => {
+                        const updated = [...prev];
+                        updated[i].progress = 30;
+                        return updated;
+                    });
+
+                    // 2. Upload to storage using native fetch
+                    const uploadRes = await fetch(uploadUrl, {
+                        method: 'PUT',
+                        body: files[i].file,
+                        headers: {
+                            'Content-Type': files[i].file.type
+                        }
+                    });
+
+                    if (!uploadRes.ok) {
+                        throw new Error(`Upload failed: ${uploadRes.statusText}`);
                     }
-                });
 
-                const finalUrl = fileKey; // Backend expects the key
-                uploadedUrls.push(finalUrl);
-                setFiles(prev => {
-                    const updated = [...prev];
-                    updated[i].url = finalUrl;
-                    return updated;
-                });
+                    // Success
+                    setFiles(prev => {
+                        const updated = [...prev];
+                        updated[i].progress = 100;
+                        updated[i].url = fileKey;
+                        return updated;
+                    });
+
+                    uploadedUrls.push({
+                        imageKey: fileKey,
+                        mimeType: files[i].file.type,
+                        fileSizeBytes: files[i].file.size
+                    });
+
+                } catch (fileErr) {
+                    console.error('File upload error:', fileErr);
+                    setFiles(prev => {
+                        const updated = [...prev];
+                        updated[i].error = 'Failed';
+                        return updated;
+                    });
+                    throw fileErr;
+                }
             }
 
             onUploadComplete(uploadedUrls);

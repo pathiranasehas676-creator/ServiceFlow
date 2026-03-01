@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 const formSchema = z.object({
     password: z.string().min(1, 'Password is required'),
@@ -45,14 +45,14 @@ export function ReAuthModal({ open, onOpenChange, onSuccess }: ReAuthModalProps)
 
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
         try {
-            const response = await apiClient.post('/auth/re-auth', values);
-            const token = typeof response.data === 'string' ? response.data : response.data.elevatedToken;
+            const data = await api.post('/auth/re-auth', values);
+            const token = typeof data === 'string' ? data : data.elevatedToken;
             onSuccess(token);
             toast.success('Authenticated');
             onOpenChange(false);
             form.reset();
         } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Invalid password');
+            toast.error(error.message || 'Invalid password');
         }
     };
 

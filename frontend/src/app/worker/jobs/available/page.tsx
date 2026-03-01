@@ -7,26 +7,40 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapPin, DollarSign, Briefcase, Filter, Search, Clock } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { toast } from 'sonner';
 import { cn, formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ProfileLockedModal } from '@/components/worker/profile-locked-modal';
 
 export default function AvailableJobsPage() {
+    const router = useRouter();
     const [jobs, setJobs] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [radius, setRadius] = useState('10');
     const [acceptingId, setAcceptingId] = useState<string | null>(null);
+    const [lockModal, setLockModal] = useState<{
+        isOpen: boolean;
+        missingItems: string[];
+        reasons: string[];
+        currentScore: number;
+    }>({
+        isOpen: false,
+        missingItems: [],
+        reasons: [],
+        currentScore: 0
+    });
 
     const loadJobs = async () => {
         setLoading(true);
         try {
             // In real app, pass radius and lat/long
-            const response = await apiClient.get('/worker/jobs/available', {
+            const data = await api.get('/jobs/available', {
                 params: { radius }
             });
-            setJobs(Array.isArray(response.data) ? response.data : []);
+            setJobs(Array.isArray(data) ? data : []);
         } catch (error) {
             toast.error('Failed to load available jobs');
         } finally {
@@ -46,12 +60,26 @@ export default function AvailableJobsPage() {
 
         setAcceptingId(id);
         try {
-            await apiClient.post(`/worker/jobs/${id}/accept`);
+            await api.post(`/jobs/${id}/accept`);
             toast.success('Job accepted successfully!');
-            // Refresh list to remove accepted job
-            setJobs(prev => prev.filter(j => j.id !== id));
-        } catch (error) {
-            toast.error('Failed to accept job. It may be taken.');
+            // Redirect to job detail page immediately
+            router.push(`/worker/jobs/${id}`);
+        } catch (error: any) {
+            if (error.response?.status === 403) {
+                const data = error.response.data;
+                if (data.missingItems || data.reasons) {
+                    setLockModal({
+                        isOpen: true,
+                        missingItems: data.missingItems || [],
+                        reasons: data.reasons || [],
+                        currentScore: data.currentScore || 0
+                    });
+                } else {
+                    toast.error(data.message || 'Action blocked by policy');
+                }
+            } else {
+                toast.error('Failed to accept job. It may be taken.');
+            }
         } finally {
             setAcceptingId(null);
         }
@@ -163,6 +191,16 @@ export default function AvailableJobsPage() {
                     ))}
                 </div>
             )}
+
+            <ProfileLockedModal
+                isOpen={lockModal.isOpen}
+                onClose={() => setLockModal(prev => ({ ...prev, isOpen: false }))}
+                title="Profile Incomplete"
+                description="Your profile does not meet the requirements to accept jobs."
+                missingItems={lockModal.missingItems}
+                reasons={lockModal.reasons}
+                currentScore={lockModal.currentScore}
+            />
         </div>
     );
 }

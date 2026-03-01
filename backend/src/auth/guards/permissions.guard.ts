@@ -36,16 +36,11 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    // Check database for role permissions
-    const permissions = await this.prisma.rolePermission.findMany({
-      where: { role: user.role },
-      include: { permission: true },
-    });
-
-    const userPermissions = permissions.map((p) => p.permission.name);
+    // Use permissions from JWT (set by JwtStrategy)
+    const userPermissions = new Set(user.permissions || []);
 
     const hasPermission = requiredPermissions.every((permission) =>
-      userPermissions.includes(permission),
+      userPermissions.has(permission),
     );
 
     if (!hasPermission) {

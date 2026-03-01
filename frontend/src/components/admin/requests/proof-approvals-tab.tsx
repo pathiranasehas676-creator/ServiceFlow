@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Search, Eye, CheckCircle, XCircle, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Search, Eye, CheckCircle, XCircle, Loader2, Image as ImageIcon, ShieldAlert, LocateFixed, MapPinOff } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -126,7 +126,17 @@ export function ProofApprovalsTab() {
                                                     <span>{proof.proofs?.length || 0}</span>
                                                 </div>
                                             </TableCell>
-                                            <TableCell>{getStatusBadge(proof.status)}</TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col gap-1">
+                                                    {getStatusBadge(proof.status)}
+                                                    {proof.arrivalIsMock && (
+                                                        <Badge variant="destructive" className="text-[9px] h-4">MOCK LOC</Badge>
+                                                    )}
+                                                    {(proof.arrivalAccuracyMeters || 0) > 100 && (
+                                                        <Badge variant="outline" className="text-[9px] h-4 text-orange-600 border-orange-200">LOW ACC</Badge>
+                                                    )}
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="text-sm text-muted-foreground">
                                                 {formatDistanceToNow(new Date(proof.updatedAt), { addSuffix: true })}
                                             </TableCell>
@@ -218,6 +228,11 @@ export function ProofApprovalsTab() {
                                     <Label className="text-muted-foreground">Worker</Label>
                                     <p className="font-medium">{selectedProof.worker?.user?.fullName}</p>
                                     <p className="text-sm text-muted-foreground">{selectedProof.worker?.user?.email}</p>
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <Badge variant="outline" className={`font-black text-[10px] ${(selectedProof.worker?.user?.verificationScore || 0) > 40 ? 'text-red-600 bg-red-50 border-red-100' : 'text-emerald-600 bg-emerald-50 border-emerald-100'}`}>
+                                            TRUST: {100 - (selectedProof.worker?.user?.verificationScore || 0)}%
+                                        </Badge>
+                                    </div>
                                 </div>
                                 <div>
                                     <Label className="text-muted-foreground">Service</Label>
@@ -230,6 +245,50 @@ export function ProofApprovalsTab() {
                                 <div>
                                     <Label className="text-muted-foreground">Status</Label>
                                     <div className="mt-1">{getStatusBadge(selectedProof.status)}</div>
+                                </div>
+                            </div>
+
+                            <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-4">
+                                <h4 className="text-sm font-bold flex items-center gap-2 text-slate-800">
+                                    <ShieldAlert className="h-4 w-4 text-indigo-600" />
+                                    Security & Arrival Validation
+                                </h4>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] text-muted-foreground uppercase font-black">GPS Accuracy</Label>
+                                        <div className="flex items-center gap-2">
+                                            <LocateFixed className={`h-4 w-4 ${(selectedProof.arrivalAccuracyMeters || 0) > 100 ? 'text-red-500' : 'text-emerald-500'}`} />
+                                            <span className="font-bold text-sm">{selectedProof.arrivalAccuracyMeters ? `${selectedProof.arrivalAccuracyMeters}m` : 'N/A'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] text-muted-foreground uppercase font-black">Location Integrity</Label>
+                                        <div className="flex items-center gap-2">
+                                            {selectedProof.arrivalIsMock ? (
+                                                <>
+                                                    <MapPinOff className="h-4 w-4 text-red-600" />
+                                                    <Badge variant="destructive" className="animate-pulse">MOCK DETECTED</Badge>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <CheckCircle className="h-4 w-4 text-emerald-500" />
+                                                    <span className="text-sm font-bold text-emerald-700">Physical Presence</span>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] text-muted-foreground uppercase font-black">Fraud Alert</Label>
+                                        <div>
+                                            {selectedProof.arrivalIsMock ? (
+                                                <span className="text-xs font-bold text-red-600">HIGH RISK: GPS SPOOFING</span>
+                                            ) : (selectedProof.arrivalAccuracyMeters || 0) > 100 ? (
+                                                <span className="text-xs font-bold text-orange-600">MED RISK: LOW PRECISION</span>
+                                            ) : (
+                                                <span className="text-xs font-bold text-emerald-600">LOW RISK</span>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div>

@@ -4,6 +4,14 @@ import { cn } from "@/lib/utils"
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
     ({ className, type, ...props }, ref) => {
+        // Prevent "uncontrolled to controlled" warning.
+        // If a value is provided (even if null), use it or fallback to "".
+        // If value is undefined but we have an onChange, it's likely a controlled input 
+        // that hasn't initialized its state yet, so we force it to "" to stay controlled.
+        const value = props.value !== undefined
+            ? (props.value ?? "")
+            : (props.onChange ? "" : undefined);
+
         return (
             <input
                 type={type}
@@ -13,6 +21,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
                 )}
                 ref={ref}
                 {...props}
+                value={value}
             />
         )
     }

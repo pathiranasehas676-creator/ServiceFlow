@@ -12,7 +12,7 @@ export class JobsCommentsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
-  ) { }
+  ) {}
 
   async createComment(jobId: string, userId: string, message: string) {
     const job = await this.prisma.job.findUnique({

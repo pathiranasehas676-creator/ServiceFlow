@@ -11,7 +11,9 @@ export type JobStatus =
     | 'APPROVED'
     | 'COMPLETED'
     | 'CANCELLED'
-    | 'REJECTED';
+    | 'REJECTED'
+    | 'PENDING_PAYMENT'
+    | 'PENDING_CUSTOMER_CONFIRMATION';
 
 export interface Job {
     id: string;
@@ -29,6 +31,7 @@ export interface Job {
     arrivedAt?: string;
     completedAt?: string;
     createdAt: string;
+    workerId?: string;
     worker?: {
         id: string;
         name: string;

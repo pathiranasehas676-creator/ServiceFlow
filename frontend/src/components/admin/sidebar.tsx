@@ -20,7 +20,16 @@ import {
     ShieldCheck
 } from 'lucide-react';
 
-const navigationGroups = [
+import { useAuth } from '@/lib/hooks/use-auth';
+
+interface NavItem {
+    name: string;
+    href: string;
+    icon: any;
+    permission?: string;
+}
+
+const navigationGroups: { title: string; items: NavItem[] }[] = [
     {
         title: 'Overview',
         items: [
@@ -33,14 +42,18 @@ const navigationGroups = [
         title: 'Management',
         items: [
             { name: 'Services', href: '/admin/services', icon: Briefcase },
-            { name: 'Finance', href: '/admin/finance', icon: Wallet },
-            { name: 'Users & Roles', href: '/admin/users', icon: Users },
+            { name: 'Payouts', href: '/admin/finance/payouts', icon: Wallet },
+            { name: 'Verifications', href: '/admin/verifications', icon: UserCheck },
+            { name: 'Staff Management', href: '/admin/security/staff', icon: Users },
         ]
     },
     {
         title: 'System',
         items: [
+            { name: 'RBAC Security', href: '/admin/security', icon: Lock },
             { name: 'Audit Logs', href: '/admin/audit-logs', icon: FileText },
+            { name: 'System Errors', href: '/admin/system/errors', icon: ShieldAlert },
+            { name: 'Profile Policy', href: '/admin/settings/profile-policy', icon: ShieldCheck },
             { name: 'Settings', href: '/admin/settings', icon: Settings },
         ]
     }
@@ -52,6 +65,12 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ className }: AdminSidebarProps) {
     const pathname = usePathname();
+    const { user, hasPermission } = useAuth();
+
+    const filteredGroups = navigationGroups.map(group => ({
+        ...group,
+        items: group.items.filter(item => !item.permission || hasPermission(item.permission))
+    })).filter(group => group.items.length > 0);
 
     return (
         <div className={cn("hidden h-full w-64 flex-col border-r bg-card shadow-sm md:flex", className)}>
@@ -60,7 +79,7 @@ export function AdminSidebar({ className }: AdminSidebarProps) {
                 <h1 className="text-xl font-bold tracking-tight">ServiceFlow</h1>
             </div>
             <nav className="flex-1 overflow-y-auto px-3 py-6 scrollbar-none">
-                {navigationGroups.map((group) => (
+                {filteredGroups.map((group) => (
                     <div key={group.title} className="mb-6">
                         <h2 className="mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
                             {group.title}
@@ -93,12 +112,18 @@ export function AdminSidebar({ className }: AdminSidebarProps) {
             </nav>
             <div className="border-t p-4 bg-muted/20">
                 <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-indigo-600 flex items-center justify-center text-white ring-2 ring-indigo-100 shadow-lg">
-                        <span className="text-sm font-bold">AD</span>
+                    <div className={cn(
+                        "h-9 w-9 rounded-full flex items-center justify-center text-white ring-2 shadow-lg bg-indigo-600 ring-indigo-100"
+                    )}>
+                        <span className="text-sm font-bold">
+                            {user?.fullName?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'AD'}
+                        </span>
                     </div>
                     <div className="flex-1 overflow-hidden">
-                        <p className="text-sm font-bold truncate">Admin User</p>
-                        <p className="text-[10px] text-muted-foreground truncate uppercase tracking-tighter">System Administrator</p>
+                        <p className="text-sm font-bold truncate">{user?.fullName || 'Admin User'}</p>
+                        <p className="text-[10px] text-muted-foreground truncate uppercase tracking-tighter">
+                            {user?.role?.replace('_', ' ') || 'System Administrator'}
+                        </p>
                     </div>
                 </div>
             </div>

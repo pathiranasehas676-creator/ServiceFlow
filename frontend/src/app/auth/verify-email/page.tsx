@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import axios from 'axios';
+import { api, ApiError } from '@/lib/apiClient';
 import Link from 'next/link';
 
 function VerifyEmailContent() {
@@ -21,12 +21,15 @@ function VerifyEmailContent() {
 
         const verifyToken = async () => {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-                await axios.post(`${API_URL}/auth/verify-email`, { token });
+                await api.post('/auth/verify-email', { token });
                 setStatus('success');
             } catch (err: any) {
                 setStatus('error');
-                setMessage(err.response?.data?.message || 'Verification failed. The link may be invalid or expired.');
+                if (err instanceof ApiError) {
+                    setMessage(err.message);
+                } else {
+                    setMessage(err.response?.data?.message || 'Verification failed. The link may be invalid or expired.');
+                }
             }
         };
 

@@ -1,16 +1,14 @@
 import { Module } from '@nestjs/common';
-import {
-  PayoutsController,
-  WorkerPayoutsController,
-} from './payouts.controller';
-import { PrismaModule } from '../prisma/prisma.module';
-import { WalletModule } from '../wallet/wallet.module';
+import { PayoutsController } from './payouts.controller';
 import { PayoutsService } from './payouts.service';
+import { WalletModule } from '../wallet/wallet.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
-  imports: [PrismaModule, WalletModule],
-  controllers: [PayoutsController, WorkerPayoutsController],
+  imports: [WalletModule, NotificationsModule, StorageModule],
+  controllers: [PayoutsController],
   providers: [PayoutsService],
   exports: [PayoutsService],
 })
-export class PayoutsModule { }
+export class PayoutsModule {}

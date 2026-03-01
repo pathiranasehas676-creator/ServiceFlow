@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { SupportTicket, TicketMessage } from '@/lib/types/worker';
 import { toast } from 'sonner';
 
@@ -9,15 +9,13 @@ export function useSupport() {
     const ticketsQuery = useQuery<SupportTicket[]>({
         queryKey: ['support', 'tickets'],
         queryFn: async () => {
-            const response = await apiClient.get('/support/tickets');
-            return response.data;
+            return await api.get('/support/tickets');
         },
     });
 
     const createTicketMutation = useMutation({
         mutationFn: async (data: { subject: string; category: string; message: string }) => {
-            const response = await apiClient.post('/support/tickets', data);
-            return response.data;
+            return await api.post('/support/tickets', data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['support', 'tickets'] });
@@ -48,8 +46,7 @@ export function useTicketDetail(ticketId: string) {
     const ticketQuery = useQuery<SupportTicket>({
         queryKey: ['support', 'ticket', ticketId],
         queryFn: async () => {
-            const response = await apiClient.get(`/support/tickets/${ticketId}`);
-            return response.data;
+            return await api.get(`/support/tickets/${ticketId}`);
         },
         enabled: !!ticketId,
     });
@@ -57,8 +54,12 @@ export function useTicketDetail(ticketId: string) {
     const messagesQuery = useQuery<TicketMessage[]>({
         queryKey: ['support', 'messages', ticketId],
         queryFn: async () => {
-            const response = await apiClient.get(`/support/tickets/${ticketId}`);
-            return response.data.messages;
+            // Note: api.get returns the data directly. If backend returns object with messages property, access it.
+            // Assuming backend returns { ...ticket, messages: [] } or just Ticket object which has messages relation
+            // The original code was `response.data.messages`.
+            // So if `response.data` is the ticket, then we access `.messages`.
+            const data = await api.get(`/support/tickets/${ticketId}`);
+            return data.messages;
         },
         enabled: !!ticketId,
     });
@@ -76,8 +77,7 @@ export function useTicketDetail(ticketId: string) {
                 });
                 return { offline: true };
             }
-            const response = await apiClient.post(`/support/tickets/${ticketId}/messages`, { message });
-            return response.data;
+            return await api.post(`/support/tickets/${ticketId}/messages`, { message });
         },
         onSuccess: (data: any) => {
             queryClient.invalidateQueries({ queryKey: ['support', 'messages', ticketId] });

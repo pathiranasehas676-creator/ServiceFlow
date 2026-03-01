@@ -10,10 +10,10 @@ import {
     DialogFooter
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { CheckCircle, XCircle, ArrowLeft, ArrowRight, Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { Badge } from '@/components/ui/badge';
 
 interface ProofGalleryProps {
@@ -39,7 +39,7 @@ export function ProofGallery({ proof, open, onClose, onStatusChange }: ProofGall
     const handleApprove = async () => {
         setIsSubmitting(true);
         try {
-            await apiClient.post(`/admin/jobs/${proof.jobId}/proofs/approve`);
+            await api.post(`/admin/jobs/${proof.jobId}/proofs/approve`);
             toast.success('Proof approved');
             onStatusChange();
             onClose();
@@ -57,7 +57,7 @@ export function ProofGallery({ proof, open, onClose, onStatusChange }: ProofGall
         }
         setIsSubmitting(true);
         try {
-            await apiClient.post(`/admin/jobs/${proof.jobId}/proofs/reject`, { reason: rejectionReason });
+            await api.post(`/admin/jobs/${proof.jobId}/proofs/reject`, { reason: rejectionReason });
             toast.warning('Proof rejected');
             onStatusChange();
             onClose();

@@ -40,7 +40,7 @@ export function JobTable({ jobs }: JobTableProps) {
                                 <span className="text-sm font-medium text-slate-600">{job.district}</span>
                             </TableCell>
                             <TableCell>
-                                <span className="font-black text-indigo-600">${(job.budget / 100).toFixed(2)}</span>
+                                <span className="font-black text-indigo-600">${job.priceCents ? (job.priceCents / 100).toFixed(2) : '0.00'}</span>
                             </TableCell>
                             <TableCell>
                                 <StatusBadge status={job.status} />

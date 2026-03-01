@@ -20,7 +20,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 import { ReAuthModal } from '@/components/admin/re-auth-modal';
 
 const ROLES = ['ADMIN', 'STAFF', 'WORKER', 'USER'];
@@ -36,11 +36,11 @@ export default function PermissionsPage() {
         setLoading(true);
         try {
             const [permsRes, matrixRes] = await Promise.all([
-                apiClient.get('/admin/permissions'),
-                apiClient.get('/admin/permissions/matrix'),
+                api.get('/admin/permissions'),
+                api.get('/admin/permissions/matrix'),
             ]);
-            setPermissions(permsRes.data);
-            setRoleMatrix(matrixRes.data);
+            setPermissions(permsRes || []);
+            setRoleMatrix(matrixRes || {});
         } catch (error) {
             toast.error('Failed to load permissions configuration');
         } finally {
@@ -70,7 +70,7 @@ export default function PermissionsPage() {
         localStorage.setItem('elevatedToken', elevatedToken);
         setSaving(true);
         try {
-            await apiClient.post('/admin/permissions/matrix', roleMatrix);
+            await api.post('/admin/permissions/matrix', roleMatrix);
             toast.success('Permissions updated successfully');
             localStorage.removeItem('elevatedToken'); // Clear after use
         } catch (error) {

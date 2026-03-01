@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import axios from 'axios';
+import { api, ApiError } from '@/lib/apiClient';
 import Link from 'next/link';
 
 export default function RegisterPage() {
@@ -32,16 +32,20 @@ export default function RegisterPage() {
         }
 
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-            await axios.post(`${API_URL}/auth/register`, {
+            await api.post('/auth/register', {
                 fullName,
                 email,
                 password,
                 phoneNumber: phoneNumber || undefined,
             });
+
             setSuccess(true);
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Registration failed');
+            if (err instanceof ApiError) {
+                setError(err.message);
+            } else {
+                setError(err.response?.data?.message || 'Registration failed');
+            }
         } finally {
             setIsLoading(false);
         }

@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/api-client';
+import { api } from '@/lib/apiClient';
 
 export default function SessionsPage() {
     const [sessions, setSessions] = React.useState<any[]>([]);
@@ -22,8 +22,8 @@ export default function SessionsPage() {
 
     const fetchSessions = async () => {
         try {
-            const response = await apiClient.get('/auth/sessions');
-            setSessions(response.data);
+            const data = await api.get('/auth/sessions');
+            setSessions(data || []);
         } catch (error) {
             toast.error('Failed to fetch sessions');
         } finally {
@@ -37,7 +37,7 @@ export default function SessionsPage() {
 
     const revokeSession = async (id: string) => {
         try {
-            await apiClient.post(`/auth/sessions/${id}/revoke`);
+            await api.post(`/auth/sessions/${id}/revoke`);
             toast.success('Session revoked');
             fetchSessions();
         } catch (error) {
@@ -47,7 +47,7 @@ export default function SessionsPage() {
 
     const revokeAll = async () => {
         try {
-            await apiClient.post('/auth/sessions/revoke-all');
+            await api.post('/auth/sessions/revoke-all');
             toast.success('Other sessions revoked');
             fetchSessions();
         } catch (error) {

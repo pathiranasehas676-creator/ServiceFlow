@@ -23,6 +23,7 @@ export interface ProofRequest {
             fullName: string;
             email: string;
             phoneNumber?: string;
+            verificationScore?: number;
         };
     };
     service: {
@@ -35,6 +36,8 @@ export interface ProofRequest {
         caption?: string;
         sequenceOrder: number;
     }>;
+    arrivalAccuracyMeters?: number;
+    arrivalIsMock?: boolean;
     updatedAt: string;
     createdAt: string;
 }
@@ -109,6 +112,45 @@ export interface SupportTicket {
     };
     createdAt: string;
     updatedAt: string;
+}
+
+export interface Dispute {
+    id: string;
+    jobId: string;
+    openedById: string;
+    status: string;
+    reason: string;
+    resolution?: string;
+    resolvedAt?: string;
+    job: {
+        title: string;
+        status: string;
+        priceCents: number;
+    };
+    openedBy: {
+        fullName: string;
+        email: string;
+    };
+    createdAt: string;
+}
+
+export interface DisputeDetail extends Dispute {
+    job: any; // More detailed job info
+    messages: Array<{
+        id: string;
+        content: string;
+        sender: {
+            fullName: string;
+            role: string;
+        };
+        createdAt: string;
+    }>;
+    attachments: Array<{
+        id: string;
+        fileKey: string;
+        fileName: string;
+        fileType: string;
+    }>;
 }
 
 // ============================================
@@ -337,6 +379,74 @@ export function useCloseTicket() {
         },
         onError: (error: any) => {
             toast.error(error.message || 'Failed to close ticket');
+        },
+    });
+}
+
+// ============================================
+// DISPUTES
+// ============================================
+
+export function useDisputes(params: PaginationParams = {}) {
+    return useQuery({
+        queryKey: ['admin', 'requests', 'disputes', params],
+        queryFn: async () => {
+            const response = await api.get<{
+                data: Dispute[];
+                meta: { total: number; page: number; limit: number; totalPages: number };
+            }>('/admin/requests/disputes', { params });
+            return response;
+        },
+    });
+}
+
+export function useDisputeDetail(disputeId: string) {
+    return useQuery({
+        queryKey: ['admin', 'requests', 'disputes', disputeId],
+        queryFn: async () => {
+            return await api.get<DisputeDetail>(`/admin/requests/disputes/${disputeId}`);
+        },
+        enabled: !!disputeId,
+    });
+}
+
+export function useMarkDisputeInReview() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (disputeId: string) => {
+            return await api.post(`/admin/requests/disputes/${disputeId}/mark-in-review`);
+        },
+        onSuccess: (_, disputeId) => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'requests', 'disputes'] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'requests', 'disputes', disputeId] });
+            toast.success('Dispute marked as in review');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'Failed to update dispute');
+        },
+    });
+}
+
+export function useResolveDispute() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ disputeId, resolution, amountCents, note }: {
+            disputeId: string;
+            resolution: string;
+            amountCents?: number;
+            note?: string
+        }) => {
+            return await api.post(`/admin/requests/disputes/${disputeId}/resolve`, { resolution, amountCents, note });
+        },
+        onSuccess: (_, { disputeId }) => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'requests', 'disputes'] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'requests', 'disputes', disputeId] });
+            toast.success('Dispute resolved successfully');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'Failed to resolve dispute');
         },
     });
 }

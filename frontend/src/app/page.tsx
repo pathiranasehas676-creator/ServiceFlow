@@ -21,13 +21,18 @@ export default function Home() {
             </Link>
           </Button>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Button asChild variant="outline" className="w-full">
+          <div className="grid grid-cols-3 gap-2">
+            <Button asChild variant="outline" size="sm" className="w-full">
               <Link href="/admin/dashboard">
                 Admin
               </Link>
             </Button>
-            <Button asChild variant="outline" className="w-full">
+            <Button asChild variant="outline" size="sm" className="w-full">
+              <Link href="/staff/dashboard">
+                Staff
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="w-full">
               <Link href="/worker/dashboard">
                 Worker
               </Link>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../api-client';
+import { api } from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 export function useSecurity() {
@@ -10,29 +10,29 @@ export function useSecurity() {
     const sessionsQuery = useQuery({
         queryKey: ['security', 'sessions'],
         queryFn: async () => {
-            const res = await apiClient.get('/auth/sessions');
-            return res.data;
+            const res = await api.get('/auth/sessions');
+            return res || [];
         }
     });
 
     const changePasswordMutation = useMutation({
         mutationFn: async (data: any) => {
-            const res = await apiClient.post('/auth/change-password', data);
-            return res.data;
+            const res = await api.post('/auth/change-password', data);
+            return res;
         },
         onSuccess: () => {
             toast.success("Password changed successfully. All other sessions revoked.");
             queryClient.invalidateQueries({ queryKey: ['security', 'sessions'] });
         },
         onError: (err: any) => {
-            toast.error(err.response?.data?.message || "Failed to change password");
+            toast.error(err.message || "Failed to change password");
         }
     });
 
     const revokeSessionMutation = useMutation({
         mutationFn: async (sessionId: string) => {
-            const res = await apiClient.post(`/auth/sessions/${sessionId}/revoke`);
-            return res.data;
+            const res = await api.post(`/auth/sessions/${sessionId}/revoke`);
+            return res;
         },
         onSuccess: () => {
             toast.success("Session revoked");
@@ -42,8 +42,8 @@ export function useSecurity() {
 
     const revokeAllSessionsMutation = useMutation({
         mutationFn: async () => {
-            const res = await apiClient.post('/auth/sessions/revoke-all');
-            return res.data;
+            const res = await api.post('/auth/sessions/revoke-all');
+            return res;
         },
         onSuccess: () => {
             toast.success("All other sessions revoked");

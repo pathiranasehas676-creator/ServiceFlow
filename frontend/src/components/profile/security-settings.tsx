@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Shield, Key, Monitor, LogOut, Clock, Globe, Trash2, Loader2 } from 'lucide-react';
+import { Shield, Key, Monitor, LogOut, Clock, Globe, Trash2, Loader2, Fingerprint, Smartphone } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { formatDistanceToNow } from 'date-fns';
 
 export function SecuritySettings() {
@@ -81,6 +82,34 @@ export function SecuritySettings() {
                             CHANGE PASSWORD
                         </Button>
                     </form>
+                </CardContent>
+            </Card>
+
+            {/* Mobile & Biometrics */}
+            <Card className="border-none shadow-sm">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Fingerprint className="h-5 w-5 text-blue-500" />
+                        Biometric Login
+                    </CardTitle>
+                    <CardDescription>Sign in faster with FaceID or TouchID.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="space-y-0.5">
+                            <Label className="text-sm font-bold text-slate-900">Security Key / Biometrics</Label>
+                            <p className="text-xs text-slate-500 font-medium tracking-tight">Requires a compatible mobile device or security key.</p>
+                        </div>
+                        <Switch disabled />
+                    </div>
+
+                    <div className="flex items-start gap-4 p-4 rounded-2xl bg-blue-50 border border-blue-100">
+                        <Smartphone className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                        <p className="text-xs text-blue-800 font-medium leading-relaxed">
+                            Full native integration for Biometric Authentication is coming in the Q3 mobile update.
+                            Your device must support WebAuthn to use this feature in the browser.
+                        </p>
+                    </div>
                 </CardContent>
             </Card>
 
